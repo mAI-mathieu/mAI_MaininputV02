@@ -525,25 +525,87 @@ function findOutputIndex(node, fieldId, fallbackIndex = -1) {
 }
 
 
-function syncOutputsAfterLoad(node, fields) {
+function findBestExistingOutputIndex(outputs, descriptor, expectedIndex, usedOldIndexes) {
+    let index = outputs.findIndex((output, i) =>
+        !usedOldIndexes.has(i) &&
+        output.__mAI_MainInputV02_fieldId === descriptor.fieldId
+    );
+    if (index >= 0) {
+        return index;
+    }
+
+    index = outputs.findIndex((output, i) =>
+        !usedOldIndexes.has(i) &&
+        output.name === descriptor.name &&
+        output.type === descriptor.type
+    );
+    if (index >= 0) {
+        return index;
+    }
+
+    const fallbackOutput = outputs[expectedIndex];
+    if (
+        fallbackOutput &&
+        !usedOldIndexes.has(expectedIndex) &&
+        Array.isArray(fallbackOutput.links) &&
+        fallbackOutput.links.length > 0
+    ) {
+        return expectedIndex;
+    }
+
+    index = outputs.findIndex((output, i) =>
+        !usedOldIndexes.has(i) &&
+        output.name === descriptor.name
+    );
+    if (index >= 0) {
+        return index;
+    }
+
+    return -1;
+}
+
+
+function normalizeOutputsAfterLoad(node, fields) {
     const expected = buildOutputDescriptors(fields);
+    const currentOutputs = node.outputs ?? [];
+    const usedOldIndexes = new Set();
+    const nextOutputs = [];
 
-    for (let i = 0; i < expected.length; i++) {
-        const descriptor = expected[i];
+    for (let newIndex = 0; newIndex < expected.length; newIndex++) {
+        const descriptor = expected[newIndex];
+        const oldIndex = findBestExistingOutputIndex(
+            currentOutputs,
+            descriptor,
+            newIndex,
+            usedOldIndexes
+        );
 
-        if (node.outputs?.[i]) {
-            node.outputs[i].name = descriptor.name;
-            node.outputs[i].type = descriptor.type;
-            node.outputs[i].__mAI_MainInputV02_fieldId = descriptor.fieldId;
-        } else {
-            node.addOutput(descriptor.name, descriptor.type);
-            const output = node.outputs?.[node.outputs.length - 1];
-            if (output) {
-                output.__mAI_MainInputV02_fieldId = descriptor.fieldId;
+        let links = null;
+        if (oldIndex >= 0 && currentOutputs[oldIndex]) {
+            links = currentOutputs[oldIndex].links ?? null;
+            usedOldIndexes.add(oldIndex);
+        }
+
+        const output = {
+            name: descriptor.name,
+            type: descriptor.type,
+            links,
+        };
+
+        output.__mAI_MainInputV02_fieldId = descriptor.fieldId;
+        nextOutputs.push(output);
+
+        if (Array.isArray(links)) {
+            for (const linkId of links) {
+                const link = app.graph?.links?.[linkId];
+                if (link) {
+                    link.origin_slot = newIndex;
+                }
             }
         }
     }
 
+    node.outputs = nextOutputs;
     app.canvas?.setDirty(true, true);
 }
 
@@ -565,7 +627,7 @@ function rebuildFromConfig(node) {
         addFieldWidgets(node, field);
     }
 
-    syncOutputsAfterLoad(node, fields);
+    normalizeOutputsAfterLoad(node, fields);
     resizeNode(node);
 }
 
