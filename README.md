@@ -7,6 +7,13 @@ Users add output fields with buttons inside the node. The raw JSON config is
 kept in a hidden `fields_config` widget so workflows can save, reload, and
 export to API format without requiring manual JSON editing.
 
+The node also includes fixed size controls and outputs:
+
+- `size_preset`
+- `width`
+- `height`
+- `User_prompt`
+
 ## Node
 
 - Display name: `mAI MainInputV02`
@@ -22,8 +29,29 @@ No install script or heavy dependencies are required.
 
 ## How It Works
 
-The node has no connectable input sockets on the left side. It only creates
-dynamic output sockets on the right side.
+The node has no connectable input sockets on the left side. It always exposes
+fixed `width`, `height`, and `User_prompt` outputs first, then dynamic output
+sockets on the right side.
+
+Use `size_preset` to set common dimensions. Selecting a non-custom preset
+updates `width` and `height`. Editing `width` or `height` manually switches the
+preset back to `custom`.
+
+`User_prompt` is a mandatory multiline text widget. It always outputs `STRING`
+and is not part of the dynamic `fields_config`.
+
+Available presets:
+
+- `custom`
+- `1:1 square 1024x1024`
+- `3:4 portrait 896x1152`
+- `5:8 portrait 832x1216`
+- `9:16 portrait 768x1344`
+- `9:21 portrait 640x1536`
+- `4:3 landscape 1152x896`
+- `3:2 landscape 1216x832`
+- `16:9 landscape 1344x768`
+- `21:9 landscape 1536x640`
 
 Use the node buttons to add fields:
 
@@ -36,6 +64,9 @@ Use the node buttons to add fields:
 
 Each added field creates visible controls for the value, a matching output
 socket, and an internal serialized field definition in `fields_config`.
+
+Dynamic outputs always appear after the fixed `width`, `height`, and
+`User_prompt` outputs.
 
 ## Supported Field Types
 
@@ -58,15 +89,21 @@ string.
 ## API Export Note
 
 ComfyUI requires static class-level return definitions, so the Python backend
-declares 24 wildcard fallback outputs:
+declares fixed `INT` outputs for `width` and `height`, followed by 24 wildcard
+fallback outputs. `User_prompt` is a fixed `STRING` output between the fixed
+size outputs and the dynamic fallback outputs:
 
 ```text
-out_1 ... out_24
+width, height, User_prompt, out_1 ... out_24
 ```
 
 The frontend replaces the visible outputs with the field names and types stored
-in `fields_config`. API exports should include `fields_config`, which contains
-the stable ids, names, types, values, and dropdown options for the fields.
+in `fields_config`, while keeping `width`, `height`, and `User_prompt` fixed at
+the front. API exports should include `size_preset`, `width`, `height`,
+`User_prompt`, and `fields_config`. If `size_preset` is `custom`, API execution
+uses the supplied `width` and `height`. Non-custom presets resolve to their
+mapped dimensions. API callers can set `User_prompt` directly as a normal node
+input.
 
 Example internal config:
 
@@ -93,6 +130,8 @@ Users should not need to edit this JSON directly.
 ## Known Limitations
 
 - Maximum of 24 fields.
+- `width`, `height`, and `User_prompt` are fixed outputs and cannot be removed
+  or renamed.
 - `IMAGE` execution is not implemented in v1.
 - Removing a field removes its matching output socket and can remove links from
   that socket.
@@ -115,24 +154,33 @@ Common causes:
 
 1. Restart ComfyUI.
 2. Add `mAI MainInputV02`.
-3. Confirm no left-side input sockets.
-4. Confirm there is no visible JSON editing workflow.
-5. Click `+ String`.
-6. Confirm a string field appears and a `STRING` output appears.
-7. Rename the field.
-8. Confirm the output socket name updates.
-9. Click `+ Dropdown`.
-10. Add options: `square, portrait, landscape`.
-11. Confirm the dropdown works and outputs `STRING`.
-12. Click `+ Int`, `+ Float`, and `+ Boolean`.
-13. Confirm each creates the correct output socket type.
-14. Remove one field.
-15. Confirm its output disappears.
-16. Save the workflow.
-17. Reload the browser.
-18. Confirm all fields and outputs are restored.
-19. Export workflow/API format.
-20. Confirm `fields_config` is present and contains the field definitions.
-21. Run the workflow and confirm scalar values output correctly.
-22. Test image field execution only after the image-loading follow-up is
+3. Confirm `size_preset`, `width`, `height`, and `User_prompt` are visible.
+4. Confirm no left-side input sockets.
+5. Confirm `width`, `height`, and `User_prompt` are the first three outputs.
+6. Select `1:1 square 1024x1024` and confirm width/height become `1024`.
+7. Select `16:9 landscape 1344x768` and confirm width becomes `1344` and
+   height becomes `768`.
+8. Manually edit `width` and confirm `size_preset` becomes `custom`.
+9. Type text in `User_prompt` and connect it to Display Any.
+10. Confirm there is no visible JSON editing workflow.
+11. Click `+ String`.
+12. Confirm a string field appears and a `STRING` output appears after
+    `width`, `height`, and `User_prompt`.
+13. Rename the field.
+14. Confirm the output socket name updates.
+15. Click `+ Dropdown`.
+16. Add options: `square, portrait, landscape`.
+17. Confirm the dropdown works and outputs `STRING`.
+18. Click `+ Int`, `+ Float`, and `+ Boolean`.
+19. Confirm each creates the correct output socket type after the fixed outputs.
+20. Remove one field.
+21. Confirm its output disappears and fixed outputs remain.
+22. Save the workflow.
+23. Reload the browser.
+24. Confirm all fixed and dynamic outputs are restored.
+25. Export workflow/API format.
+26. Confirm `size_preset`, `width`, `height`, `User_prompt`, and
+    `fields_config` are present.
+27. Run the workflow and confirm scalar values output correctly.
+28. Test image field execution only after the image-loading follow-up is
     implemented.

@@ -1,9 +1,21 @@
-from ..utils.field_config import DEFAULT_FIELDS_CONFIG_JSON, MAX_FIELDS, parse_fields_config
+from ..utils.field_config import (
+    DEFAULT_FIELDS_CONFIG_JSON,
+    DEFAULT_HEIGHT,
+    DEFAULT_SIZE_PRESET,
+    DEFAULT_WIDTH,
+    MAX_FIELDS,
+    SIZE_PRESET_NAMES,
+    parse_fields_config,
+    resolve_size,
+)
 
 
 class mAI_MainInputV02:
     CATEGORY = "mAI/Input"
     RETURN_TYPES = (
+        "INT",
+        "INT",
+        "STRING",
         "*",
         "*",
         "*",
@@ -30,6 +42,9 @@ class mAI_MainInputV02:
         "*",
     )
     RETURN_NAMES = (
+        "width",
+        "height",
+        "User_prompt",
         "out_1",
         "out_2",
         "out_3",
@@ -61,6 +76,10 @@ class mAI_MainInputV02:
     def INPUT_TYPES(cls):
         return {
             "required": {
+                "size_preset": (SIZE_PRESET_NAMES, {"default": DEFAULT_SIZE_PRESET}),
+                "width": ("INT", {"default": DEFAULT_WIDTH, "min": 1}),
+                "height": ("INT", {"default": DEFAULT_HEIGHT, "min": 1}),
+                "User_prompt": ("STRING", {"default": "", "multiline": True}),
                 "fields_config": (
                     "STRING",
                     {"default": DEFAULT_FIELDS_CONFIG_JSON, "multiline": True},
@@ -68,10 +87,19 @@ class mAI_MainInputV02:
             },
         }
 
-    def execute(self, fields_config):
+    def execute(
+        self,
+        size_preset=DEFAULT_SIZE_PRESET,
+        width=DEFAULT_WIDTH,
+        height=DEFAULT_HEIGHT,
+        User_prompt="",
+        fields_config=None,
+    ):
+        width, height = resolve_size(size_preset, width, height)
         fields = parse_fields_config(fields_config)
-        values = [self._value_for_field(field) for field in fields]
-        values.extend([""] * (MAX_FIELDS - len(values)))
+        values = [int(width), int(height), User_prompt]
+        values.extend(self._value_for_field(field) for field in fields)
+        values.extend([""] * (MAX_FIELDS + 3 - len(values)))
         return tuple(values)
 
     @staticmethod

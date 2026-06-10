@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from utils.field_config import DEFAULT_FIELDS_CONFIG, MAX_FIELDS, parse_fields_config
+from utils.field_config import DEFAULT_FIELDS_CONFIG, MAX_FIELDS, parse_fields_config, resolve_size
 
 
 class FieldConfigTests(unittest.TestCase):
@@ -81,6 +81,12 @@ class FieldConfigTests(unittest.TestCase):
                 '[{"id": "field_1", "name": "ratio", "type": "DROPDOWN", '
                 '"options": [1], "value": "1"}]'
             )
+
+    def test_resolve_size_uses_preset_dimensions(self):
+        self.assertEqual(resolve_size("3:4 portrait 896x1152", 1, 1), (896, 1152))
+
+    def test_resolve_size_custom_uses_supplied_dimensions(self):
+        self.assertEqual(resolve_size("custom", 640, 480), (640, 480))
 
 
 if __name__ == "__main__":

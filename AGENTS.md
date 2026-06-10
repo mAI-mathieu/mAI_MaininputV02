@@ -47,6 +47,30 @@ If a dependency is missing, raise a clear error inside the node function.
 - Do not rename public node inputs or outputs unless the task asks for it.
 - When changing public inputs or outputs, update README and example workflows.
 
+## Architecture documentation rule
+
+If a task changes the architecture, lifecycle, serialized state, reload behavior, API export behavior, dynamic output behavior, or file/module responsibilities, Codex must update the relevant architecture documentation in the same task.
+
+For mAI MainInputV02, update:
+
+- `docs/MAIN_INPUT_V02_ARCHITECTURE.md`
+
+Update it when changing:
+
+- how `fields_config` is stored or serialized
+- how dynamic widgets are rebuilt
+- how output sockets are created, removed, renamed, or normalized
+- how reload/link preservation works
+- how API export is expected to work
+- supported field types
+- image or mask behavior
+- file/module responsibilities
+- per-node-instance state rules
+
+Do not let implementation and documentation drift apart.
+
+If no architecture documentation update is needed, mention why in the final response.
+
 ## Testing
 
 - Add small pure Python tests for logic when possible.

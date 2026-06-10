@@ -2,6 +2,24 @@ import json
 
 
 MAX_FIELDS = 24
+DEFAULT_SIZE_PRESET = "custom"
+DEFAULT_WIDTH = 1024
+DEFAULT_HEIGHT = 1024
+
+SIZE_PRESETS = {
+    "custom": None,
+    "1:1 square 1024x1024": {"width": 1024, "height": 1024},
+    "3:4 portrait 896x1152": {"width": 896, "height": 1152},
+    "5:8 portrait 832x1216": {"width": 832, "height": 1216},
+    "9:16 portrait 768x1344": {"width": 768, "height": 1344},
+    "9:21 portrait 640x1536": {"width": 640, "height": 1536},
+    "4:3 landscape 1152x896": {"width": 1152, "height": 896},
+    "3:2 landscape 1216x832": {"width": 1216, "height": 832},
+    "16:9 landscape 1344x768": {"width": 1344, "height": 768},
+    "21:9 landscape 1536x640": {"width": 1536, "height": 640},
+}
+
+SIZE_PRESET_NAMES = list(SIZE_PRESETS.keys())
 
 SUPPORTED_FIELD_TYPES = ("STRING", "DROPDOWN", "IMAGE", "INT", "FLOAT", "BOOLEAN")
 
@@ -40,6 +58,14 @@ def validate_fields_config(raw_config):
 
 def output_type_for_field(field_type):
     return OUTPUT_TYPE_BY_FIELD_TYPE[field_type]
+
+
+def resolve_size(size_preset, width, height):
+    preset = SIZE_PRESETS.get(size_preset)
+    if preset:
+        return preset["width"], preset["height"]
+
+    return int(width), int(height)
 
 
 def _validate_field(item, index):
