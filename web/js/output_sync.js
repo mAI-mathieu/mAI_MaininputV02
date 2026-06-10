@@ -113,6 +113,7 @@ export function findBestExistingOutputIndex(outputs, descriptor, expectedIndex, 
 
     const fallbackOutput = outputs[expectedIndex];
     if (
+        !descriptor.fixed &&
         fallbackOutput &&
         !usedOldIndexes.has(expectedIndex) &&
         Array.isArray(fallbackOutput.links) &&
@@ -148,13 +149,16 @@ export function normalizeOutputsAfterLoad(node, fields) {
             usedOldIndexes
         );
 
+        let oldOutput = null;
         let links = null;
         if (oldIndex >= 0 && currentOutputs[oldIndex]) {
-            links = currentOutputs[oldIndex].links ?? null;
+            oldOutput = currentOutputs[oldIndex];
+            links = oldOutput.links ?? null;
             usedOldIndexes.add(oldIndex);
         }
 
         const output = {
+            ...(oldOutput ?? {}),
             name: descriptor.name,
             type: descriptor.type,
             links,
@@ -163,16 +167,39 @@ export function normalizeOutputsAfterLoad(node, fields) {
         output.__mAI_MainInputV02_fieldId = descriptor.fieldId;
         nextOutputs.push(output);
 
-        if (Array.isArray(links)) {
-            for (const linkId of links) {
-                const link = graphLinkById(linkId);
-                if (link) {
-                    link.origin_slot = newIndex;
-                }
-            }
-        }
+        updateLinkOriginSlots(links, newIndex);
     }
 
+    appendUnexpectedLinkedOutputs(currentOutputs, usedOldIndexes, nextOutputs);
     node.outputs = nextOutputs;
     markCanvasDirty();
+}
+
+
+function appendUnexpectedLinkedOutputs(currentOutputs, usedOldIndexes, nextOutputs) {
+    for (let oldIndex = 0; oldIndex < currentOutputs.length; oldIndex++) {
+        const output = currentOutputs[oldIndex];
+        const links = output?.links;
+        if (usedOldIndexes.has(oldIndex) || !Array.isArray(links) || links.length === 0) {
+            continue;
+        }
+
+        const newIndex = nextOutputs.length;
+        nextOutputs.push({ ...output, links });
+        updateLinkOriginSlots(links, newIndex);
+    }
+}
+
+
+function updateLinkOriginSlots(links, outputIndex) {
+    if (!Array.isArray(links)) {
+        return;
+    }
+
+    for (const linkId of links) {
+        const link = graphLinkById(linkId);
+        if (link) {
+            link.origin_slot = outputIndex;
+        }
+    }
 }

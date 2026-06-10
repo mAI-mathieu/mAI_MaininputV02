@@ -87,7 +87,7 @@ export function normalizeOptions(options) {
 
 
 export function normalizeValue(value, type) {
-    if (type === "STRING" || type === "IMAGE") {
+    if (type === "STRING" || type === "IMAGE" || type === "MASK") {
         return normalizeString(value);
     }
     if (type === "INT") {

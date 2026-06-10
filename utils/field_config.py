@@ -21,12 +21,13 @@ SIZE_PRESETS = {
 
 SIZE_PRESET_NAMES = list(SIZE_PRESETS.keys())
 
-SUPPORTED_FIELD_TYPES = ("STRING", "DROPDOWN", "IMAGE", "INT", "FLOAT", "BOOLEAN")
+SUPPORTED_FIELD_TYPES = ("STRING", "DROPDOWN", "IMAGE", "MASK", "INT", "FLOAT", "BOOLEAN")
 
 OUTPUT_TYPE_BY_FIELD_TYPE = {
     "STRING": "STRING",
     "DROPDOWN": "STRING",
     "IMAGE": "IMAGE",
+    "MASK": "MASK",
     "INT": "INT",
     "FLOAT": "FLOAT",
     "BOOLEAN": "BOOLEAN",
@@ -126,7 +127,7 @@ def _validate_dropdown_options(options, label):
 
 
 def _validate_value(value, field_type, label):
-    if field_type in ("STRING", "IMAGE"):
+    if field_type in ("STRING", "IMAGE", "MASK"):
         return _string_value(value)
     if field_type == "INT":
         return int(value if value is not None else 0)

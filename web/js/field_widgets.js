@@ -1,3 +1,5 @@
+import { api } from "../../../../scripts/api.js";
+import { app } from "../../../../scripts/app.js";
 import { DEFAULT_SIZE_PRESET, DEFAULT_WIDTH, DEFAULT_HEIGHT, MAX_FIELDS, SIZE_PRESETS } from "./constants.js";
 import {
     normalizeBoolean,
@@ -27,7 +29,7 @@ let nextRuntimeId = 1;
 
 
 export function ensureControls(node) {
-    setupSizeWidgets(node);
+    setupFixedWidgets(node);
     hideFieldsConfigWidget(node);
 
     if (node.__mAI_MainInputV02_controlsAdded) {
@@ -38,9 +40,17 @@ export function ensureControls(node) {
     addButton(node, "+ String", () => addField(node, "STRING"));
     addButton(node, "+ Dropdown", () => addField(node, "DROPDOWN"));
     addButton(node, "+ Image", () => addField(node, "IMAGE"));
+    addButton(node, "+ Mask", () => addField(node, "MASK"));
     addButton(node, "+ Int", () => addField(node, "INT"));
     addButton(node, "+ Float", () => addField(node, "FLOAT"));
     addButton(node, "+ Boolean", () => addField(node, "BOOLEAN"));
+}
+
+
+function setupFixedWidgets(node) {
+    setupSizeWidgets(node);
+    setupMainImageWidget(node);
+    setupApiMaskOverrideWidget(node);
 }
 
 
@@ -79,6 +89,38 @@ function setupSizeWidgets(node) {
             markCanvasDirty();
         };
     }
+}
+
+
+function setupMainImageWidget(node) {
+    const widget = findNodeWidget(node, "Main_image");
+    if (!widget) {
+        return;
+    }
+
+    widget.options ??= {};
+    widget.options.image_upload = true;
+
+    if (!widget.__mAI_MainInputV02_imageChoicesRefreshed) {
+        widget.__mAI_MainInputV02_imageChoicesRefreshed = true;
+        refreshImageChoices(widget);
+    }
+}
+
+
+function setupApiMaskOverrideWidget(node) {
+    const widget = findNodeWidget(node, "API_mask_override_path");
+    if (!widget || widget.__mAI_MainInputV02_apiMaskCallback) {
+        return;
+    }
+
+    widget.__mAI_MainInputV02_apiMaskCallback = true;
+    const previousCallback = widget.callback;
+    widget.callback = (value, ...args) => {
+        widget.value = normalizeString(value);
+        previousCallback?.call(widget, widget.value, ...args);
+        markCanvasDirty();
+    };
 }
 
 
@@ -216,12 +258,8 @@ export function addFieldWidgets(node, field) {
             { values: field.options ?? [] }
         );
         tagFieldWidget(widgets.selected, field.id);
-    } else if (field.type === "IMAGE") {
-        widgets.value = node.addWidget("text", `${field.name} image`, field.value, (value) => {
-            field.value = normalizeString(value);
-            writeFieldsConfig(node, getFieldState(node));
-        });
-        tagFieldWidget(widgets.value, field.id);
+    } else if (field.type === "IMAGE" || field.type === "MASK") {
+        addImageLikeFieldWidgets(node, field, widgets);
     } else if (field.type === "INT") {
         widgets.value = node.addWidget("number", `${field.name} value`, field.value, (value) => {
             field.value = normalizeValue(value, "INT");
@@ -254,6 +292,129 @@ export function addStringValueWidget(node, name, value, callback) {
 }
 
 
+function addImageLikeFieldWidgets(node, field, widgets) {
+    widgets.value = node.addWidget(
+        "combo",
+        `${field.name} ${field.type.toLowerCase()}`,
+        field.value,
+        (value) => {
+            field.value = normalizeString(value);
+            writeFieldsConfig(node, getFieldState(node));
+        },
+        { values: field.value ? [field.value] : [] }
+    );
+    tagFieldWidget(widgets.value, field.id);
+    refreshImageChoices(widgets.value);
+
+    widgets.upload = node.addWidget("button", `Upload ${field.name}`, null, () => {
+        uploadImageForField(node, field, widgets.value);
+    });
+    tagFieldWidget(widgets.upload, field.id);
+
+    if (field.type === "MASK") {
+        widgets.maskEditor = node.addWidget("button", `Edit ${field.name} mask`, null, () => {
+            openMaskEditorIfAvailable(node, widgets.value);
+        });
+        tagFieldWidget(widgets.maskEditor, field.id);
+    }
+}
+
+
+async function refreshImageChoices(widget) {
+    try {
+        const response = await api.fetchApi("/object_info/LoadImage");
+        const objectInfo = await response.json();
+        const values = objectInfo?.LoadImage?.input?.required?.image?.[0] ?? [];
+        widget.options ??= {};
+        widget.options.values = withCurrentValue(values, widget.value);
+        markCanvasDirty();
+    } catch (error) {
+        warn("Could not refresh ComfyUI input image list.", error);
+    }
+}
+
+
+function withCurrentValue(values, currentValue) {
+    const normalizedValues = Array.isArray(values) ? values : [];
+    if (currentValue && !normalizedValues.includes(currentValue)) {
+        return [currentValue, ...normalizedValues];
+    }
+
+    return normalizedValues;
+}
+
+
+function uploadImageForField(node, field, imageWidget) {
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/png,image/jpeg,image/webp,image/bmp,image/gif";
+    fileInput.onchange = async () => {
+        const file = fileInput.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        const body = new FormData();
+        body.append("image", file);
+        body.append("overwrite", "true");
+
+        try {
+            const response = await api.fetchApi("/upload/image", {
+                method: "POST",
+                body,
+            });
+            const uploadResult = await response.json();
+            const filename = uploadedImageName(uploadResult);
+
+            field.value = filename;
+            imageWidget.value = filename;
+            imageWidget.options ??= {};
+            imageWidget.options.values = withCurrentValue(imageWidget.options.values ?? [], filename);
+            writeFieldsConfig(node, getFieldState(node));
+            markCanvasDirty();
+        } catch (error) {
+            warn(`Could not upload image for field '${field.name}'.`, error);
+        }
+    };
+    fileInput.click();
+}
+
+
+function uploadedImageName(uploadResult) {
+    const name = uploadResult?.name ?? "";
+    const subfolder = uploadResult?.subfolder ?? "";
+
+    if (!subfolder) {
+        return name;
+    }
+
+    return `${subfolder}/${name}`;
+}
+
+
+function openMaskEditorIfAvailable(node, imageWidget) {
+    const openMaskEditor =
+        app.open_maskeditor ??
+        app.openMaskEditor ??
+        app.canvas?.open_maskeditor ??
+        app.canvas?.openMaskEditor;
+
+    if (typeof openMaskEditor !== "function") {
+        warn(
+            "ComfyUI mask editor hook was not available for this dynamic MASK field. "
+            + "Use a filename with an existing alpha mask, or edit the mask with a standard Load Image node."
+        );
+        return;
+    }
+
+    try {
+        openMaskEditor.call(app, node, imageWidget);
+    } catch (error) {
+        warn("ComfyUI mask editor hook failed for this dynamic MASK field.", error);
+    }
+}
+
+
 export function tagFieldWidget(widget, fieldId) {
     widget.__mAI_MainInputV02_dynamicField = true;
     widget.__mAI_MainInputV02_fieldId = fieldId;
@@ -269,7 +430,9 @@ export function refreshFieldWidgetLabels(node, field) {
     }
 
     if (widgets.value) {
-        widgets.value.name = field.type === "IMAGE" ? `${field.name} image` : `${field.name} value`;
+        widgets.value.name = field.type === "IMAGE" || field.type === "MASK"
+            ? `${field.name} ${field.type.toLowerCase()}`
+            : `${field.name} value`;
     }
     if (widgets.options) {
         widgets.options.name = `${field.name} options`;
@@ -279,6 +442,12 @@ export function refreshFieldWidgetLabels(node, field) {
     }
     if (widgets.remove) {
         widgets.remove.name = `Remove ${field.name}`;
+    }
+    if (widgets.upload) {
+        widgets.upload.name = `Upload ${field.name}`;
+    }
+    if (widgets.maskEditor) {
+        widgets.maskEditor.name = `Edit ${field.name} mask`;
     }
 }
 

@@ -27,6 +27,12 @@ class FieldConfigTests(unittest.TestCase):
                 "type": "DROPDOWN",
                 "options": "1:1, 16:9, 9:16",
                 "value": "16:9"
+              },
+              {
+                "id": "field_3",
+                "name": "subject_mask",
+                "type": "mask",
+                "value": "mask.png"
               }
             ]
             """
@@ -47,6 +53,12 @@ class FieldConfigTests(unittest.TestCase):
                     "type": "DROPDOWN",
                     "options": ["1:1", "16:9", "9:16"],
                     "value": "16:9",
+                },
+                {
+                    "id": "field_3",
+                    "name": "subject_mask",
+                    "type": "MASK",
+                    "value": "mask.png",
                 },
             ],
         )

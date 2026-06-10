@@ -8,6 +8,13 @@ from ..utils.field_config import (
     parse_fields_config,
     resolve_size,
 )
+from ..utils.image_loader import (
+    list_input_images,
+    load_image_and_mask_tensors,
+    load_image_tensor,
+    load_mask_override_tensor,
+    load_mask_tensor,
+)
 
 
 class mAI_MainInputV02:
@@ -16,6 +23,8 @@ class mAI_MainInputV02:
         "INT",
         "INT",
         "STRING",
+        "IMAGE",
+        "MASK",
         "*",
         "*",
         "*",
@@ -45,6 +54,8 @@ class mAI_MainInputV02:
         "width",
         "height",
         "User_prompt",
+        "Main_image",
+        "Main_mask",
         "out_1",
         "out_2",
         "out_3",
@@ -80,6 +91,8 @@ class mAI_MainInputV02:
                 "width": ("INT", {"default": DEFAULT_WIDTH, "min": 1}),
                 "height": ("INT", {"default": DEFAULT_HEIGHT, "min": 1}),
                 "User_prompt": ("STRING", {"default": "", "multiline": True}),
+                "Main_image": (list_input_images(), {"image_upload": True}),
+                "API_mask_override_path": ("STRING", {"default": ""}),
                 "fields_config": (
                     "STRING",
                     {"default": DEFAULT_FIELDS_CONFIG_JSON, "multiline": True},
@@ -93,14 +106,30 @@ class mAI_MainInputV02:
         width=DEFAULT_WIDTH,
         height=DEFAULT_HEIGHT,
         User_prompt="",
+        Main_image="",
+        API_mask_override_path="",
         fields_config=None,
     ):
         width, height = resolve_size(size_preset, width, height)
+        main_image, editor_mask = load_image_and_mask_tensors(Main_image, "Main_image")
+        main_mask = self._main_mask_value(API_mask_override_path, main_image, editor_mask)
         fields = parse_fields_config(fields_config)
-        values = [int(width), int(height), User_prompt]
+        values = [int(width), int(height), User_prompt, main_image, main_mask]
         values.extend(self._value_for_field(field) for field in fields)
-        values.extend([""] * (MAX_FIELDS + 3 - len(values)))
+        values.extend([""] * (MAX_FIELDS + 5 - len(values)))
         return tuple(values)
+
+    @staticmethod
+    def _main_mask_value(API_mask_override_path, main_image, editor_mask):
+        if not API_mask_override_path:
+            return editor_mask
+
+        target_size = (int(main_image.shape[2]), int(main_image.shape[1]))
+        return load_mask_override_tensor(
+            API_mask_override_path,
+            "API_mask_override_path",
+            target_size,
+        )
 
     @staticmethod
     def _value_for_field(field):
@@ -117,10 +146,8 @@ class mAI_MainInputV02:
         if field_type == "BOOLEAN":
             return field["value"]
         if field_type == "IMAGE":
-            raise NotImplementedError(
-                "IMAGE fields are not implemented in mAI MainInputV02 v1. "
-                "The UI can save image field definitions, but execution cannot "
-                "emit IMAGE tensors yet."
-            )
+            return load_image_tensor(field["value"], field["name"])
+        if field_type == "MASK":
+            return load_mask_tensor(field["value"], field["name"])
 
         raise ValueError(f"Unsupported field type: {field_type}")
