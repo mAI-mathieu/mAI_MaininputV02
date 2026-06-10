@@ -204,7 +204,7 @@ class MainInputV02Tests(unittest.TestCase):
             "load_image_and_mask_tensors",
             return_value=(FakeImageTensor(), object()),
         ):
-            with self.assertRaisesRegex(ValueError, "reference_image.*requires an image filename"):
+            with self.assertRaisesRegex(ValueError, "dynamic IMAGE/MASK fields were removed and should be replaced by fixed Main_image/Main_mask"):
                 node.execute(Main_image="input.png", fields_config=fields_config)
 
     def test_execute_mask_field_requires_filename(self):
@@ -227,7 +227,7 @@ class MainInputV02Tests(unittest.TestCase):
             "load_image_and_mask_tensors",
             return_value=(FakeImageTensor(), object()),
         ):
-            with self.assertRaisesRegex(ValueError, "subject_mask.*requires an image filename"):
+            with self.assertRaisesRegex(ValueError, "dynamic IMAGE/MASK fields were removed and should be replaced by fixed Main_image/Main_mask"):
                 node.execute(Main_image="input.png", fields_config=fields_config)
 
 

@@ -44,7 +44,7 @@ Each field stores:
 
 - `id`: stable field identifier
 - `name`: output/widget label
-- `type`: `STRING`, `DROPDOWN`, `IMAGE`, `MASK`, `INT`, `FLOAT`, or `BOOLEAN`
+- `type`: `STRING`, `DROPDOWN`, `INT`, `FLOAT`, or `BOOLEAN`
 - `value`: current field value
 - `options`: dropdown options, only for `DROPDOWN`
 
@@ -113,7 +113,9 @@ the fixed outputs plus dynamic outputs defined by `fields_config`.
 The fixed `Main_image` widget stores a ComfyUI input filename and uses
 ComfyUI's `image_upload` widget metadata so the frontend behaves like a regular
 image upload/select widget where possible. API workflows set `Main_image` as a
-filename string.
+filename string. Backend loading mirrors ComfyUI `LoadImage`: the node resolves
+the filename with `folder_paths.get_annotated_filepath`, loads the image tensor,
+and reads mask data from the selected image's alpha channel.
 
 The fixed `API_mask_override_path` widget stores an optional filename string. It
 is not an output, not a dynamic field, and not part of `fields_config`.
@@ -122,32 +124,27 @@ The fixed `Main_mask` output uses this priority:
 
 1. If `API_mask_override_path` is filled, load that file and output it as
    `Main_mask`.
-2. If `API_mask_override_path` is empty, use the mask associated with
-   `Main_image`, such as alpha data saved by ComfyUI's mask editor.
+2. If `API_mask_override_path` is empty, use the regular ComfyUI `LoadImage`
+   mask associated with `Main_image`, including alpha data saved by ComfyUI's
+   mask editor.
 3. If no mask exists, return an empty mask matching `Main_image` dimensions.
+
+ComfyUI's `/upload/mask` route saves a painted mask into the alpha channel of
+the referenced image. `Main_mask` follows the same convention as `LoadImage` by
+outputting inverted alpha (`1 - alpha`) when alpha is present. Only when no
+alpha/mask data exists does the node create an empty mask.
 
 When `API_mask_override_path` points to a normal image file, the backend converts
 it to luminance. When it points to an image with alpha, the backend uses alpha in
 the same inverted convention as ComfyUI Load Image. If the override mask size
 differs from `Main_image`, it is resized to `Main_image` dimensions.
 
-Dynamic `IMAGE` and `MASK` fields store ComfyUI input filenames in
-`fields_config`. API workflows set these filenames as strings, for example
-`"example.png"`. Raw image tensors are not passed through JSON.
+`API_mask_override_path` must be a ComfyUI input filename such as `mask.png` or
+`masks/mask.png`. Absolute local paths are rejected by default because accepting
+arbitrary filesystem paths from workflow/API JSON would let a workflow read
+local files outside ComfyUI's managed input directory. API callers should upload
+or copy mask files into `ComfyUI/input` first, then pass the resulting filename.
 
-The backend resolves filenames through ComfyUI `folder_paths` input-folder
-handling and rejects arbitrary absolute paths. Missing filenames or missing
-files raise clear errors that include the field name.
+Dynamic `IMAGE` and `MASK` fields are not supported. Only scalar field types (`STRING`, `DROPDOWN`, `INT`, `FLOAT`, and `BOOLEAN`) are supported.
 
-`IMAGE` fields load the selected file and return a real ComfyUI `IMAGE` tensor.
-
-`MASK` fields load the selected file's alpha channel as a real ComfyUI `MASK`
-tensor. If the file has no alpha mask, the backend returns an empty mask matching
-the image dimensions instead of crashing.
-
-The frontend uses a dynamic image select/upload control backed by ComfyUI's
-`/object_info/LoadImage` and `/upload/image` APIs. Dynamic `MASK` fields also
-show an `Edit mask` button, but the mask editor is only opened when the running
-ComfyUI frontend exposes a compatible mask editor hook. If that hook is not
-available, use a standard Load Image node to paint/save the mask, then select
-the filename here.
+If an old workflow or API export contains a dynamic `IMAGE` or `MASK` field in `fields_config`, backend validation will raise a descriptive `ValueError` explaining that dynamic `IMAGE`/`MASK` fields were removed and should be replaced by fixed `Main_image`/`Main_mask` outputs.

@@ -21,13 +21,11 @@ export const SIZE_PRESETS = {
     "21:9 landscape 1536x640": { width: 1536, height: 640 },
 };
 
-export const FIELD_TYPES = new Set(["STRING", "DROPDOWN", "IMAGE", "MASK", "INT", "FLOAT", "BOOLEAN"]);
+export const FIELD_TYPES = new Set(["STRING", "DROPDOWN", "INT", "FLOAT", "BOOLEAN"]);
 
 export const OUTPUT_TYPE_BY_FIELD_TYPE = {
     STRING: "STRING",
     DROPDOWN: "STRING",
-    IMAGE: "IMAGE",
-    MASK: "MASK",
     INT: "INT",
     FLOAT: "FLOAT",
     BOOLEAN: "BOOLEAN",

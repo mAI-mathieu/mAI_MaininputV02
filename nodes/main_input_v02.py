@@ -11,9 +11,7 @@ from ..utils.field_config import (
 from ..utils.image_loader import (
     list_input_images,
     load_image_and_mask_tensors,
-    load_image_tensor,
     load_mask_override_tensor,
-    load_mask_tensor,
 )
 
 
@@ -145,9 +143,5 @@ class mAI_MainInputV02:
             return field["value"]
         if field_type == "BOOLEAN":
             return field["value"]
-        if field_type == "IMAGE":
-            return load_image_tensor(field["value"], field["name"])
-        if field_type == "MASK":
-            return load_mask_tensor(field["value"], field["name"])
 
         raise ValueError(f"Unsupported field type: {field_type}")

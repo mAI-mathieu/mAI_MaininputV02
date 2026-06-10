@@ -62,12 +62,10 @@ Available presets:
 - `16:9 landscape 1344x768`
 - `21:9 landscape 1536x640`
 
-Use the node buttons to add fields:
+Use the node buttons to add dynamic scalar fields:
 
 - `+ String`
 - `+ Dropdown`
-- `+ Image`
-- `+ Mask`
 - `+ Int`
 - `+ Float`
 - `+ Boolean`
@@ -78,51 +76,42 @@ socket, and an internal serialized field definition in `fields_config`.
 Dynamic outputs always appear after the fixed `width`, `height`, `User_prompt`,
 `Main_image`, and `Main_mask` outputs.
 
-## Supported Field Types
+## Supported Dynamic Field Types
 
 - `STRING`: outputs `STRING`
 - `DROPDOWN`: outputs `STRING`
-- `IMAGE`: outputs `IMAGE`
-- `MASK`: outputs `MASK`
 - `INT`: outputs `INT`
 - `FLOAT`: outputs `FLOAT`
 - `BOOLEAN`: outputs `BOOLEAN`
 
+> [!NOTE]
+> Dynamic `IMAGE` and `MASK` fields are not supported. Use the fixed `Main_image` and `Main_mask` outputs instead. If an old workflow or API payload attempts to load a dynamic `IMAGE` or `MASK` in `fields_config`, the backend raises a descriptive ValueError instructing you to migrate to the fixed `Main_image`/`Main_mask` outputs.
+
 ## Main Image And Mask
 
 The fixed `Main_image` widget stores a ComfyUI input filename and outputs a real
-ComfyUI `IMAGE` tensor.
+ComfyUI `IMAGE` tensor. Its mask behavior mirrors ComfyUI's Load Image node:
+when a mask is painted with the normal ComfyUI mask editor, that mask is saved
+into the selected image's alpha channel and loaded back from there.
 
 The fixed `Main_mask` output is produced with this priority:
 
 1. If `API_mask_override_path` is filled, load that filename and output it as
    `Main_mask`.
-2. If `API_mask_override_path` is empty, use the mask data associated with
-   `Main_image`, such as alpha data saved by ComfyUI's mask editor.
+2. If `API_mask_override_path` is empty, use the regular Load Image mask data
+   associated with `Main_image`, including alpha data saved by ComfyUI's mask
+   editor.
 3. If no mask exists, output an empty mask matching the `Main_image` dimensions.
 
-`API_mask_override_path` accepts a ComfyUI input filename. It intentionally
-overrides the mask editor only when filled. Override mask files with alpha use
-the alpha channel; normal image files are converted to luminance. If the
-override mask dimensions differ from `Main_image`, the mask is resized to match
-`Main_image`.
+`API_mask_override_path` is for API override only. It intentionally overrides
+the mask editor only when filled. It expects a ComfyUI input filename such as
+`mask.png` or `masks/mask.png`, not an absolute local path or temporary Windows
+path. To use the override, first copy the mask into `ComfyUI/input` or upload it
+through the ComfyUI API, then use the uploaded filename.
 
-## Dynamic Image And Mask Fields
-
-`IMAGE` and `MASK` fields store ComfyUI input filenames in `fields_config`.
-Use the image select/upload control on the node to choose a file from ComfyUI's
-input folder.
-
-`IMAGE` fields return real ComfyUI `IMAGE` tensors.
-
-`MASK` fields read the selected image's alpha channel and return a real ComfyUI
-`MASK` tensor. If the selected image has no alpha mask, the node returns an
-empty mask matching the image dimensions.
-
-The `Edit mask` button on dynamic MASK fields tries to use ComfyUI's existing
-mask editor hook when available. If the hook is not available in your frontend
-version, edit the mask with a standard Load Image node, save it, and select the
-filename in this node.
+Override mask files with alpha use the alpha channel; normal RGB or grayscale
+image files are converted to luminance. If the override mask dimensions differ
+from `Main_image`, the mask is resized to match `Main_image`.
 
 ## API Export Note
 
@@ -156,20 +145,10 @@ Fixed image/mask API example:
 When `API_mask_override_path` is empty, the `Main_mask` output uses mask editor
 data from `Main_image` when available, otherwise it returns an empty mask.
 
-For `IMAGE` and `MASK` dynamic fields, API callers set `value` to a ComfyUI
-input filename:
+`API_mask_override_path` must be a ComfyUI input filename. Absolute local paths
+such as `C:\temp\some_mask.png` are rejected by default for safety. Upload or
+copy that file into `ComfyUI/input` first, then use the resulting filename.
 
-```json
-{
-  "id": "field_img_1",
-  "name": "reference_image",
-  "type": "IMAGE",
-  "value": "example.png"
-}
-```
-
-Missing or invalid image filenames raise clear execution errors. Raw image
-tensors are not passed through API JSON.
 
 Example internal config:
 
@@ -198,10 +177,6 @@ Users should not need to edit this JSON directly.
 - Maximum of 24 fields.
 - `width`, `height`, `User_prompt`, `Main_image`, and `Main_mask` are fixed
   outputs and cannot be removed or renamed.
-- `MASK` uses the selected image alpha channel; images without alpha return an
-  empty mask.
-- Dynamic mask editor support depends on the running ComfyUI frontend exposing a
-  compatible mask editor hook.
 - Removing a field removes its matching output socket and can remove links from
   that socket.
 - Changing field names updates output socket names, but existing downstream
@@ -217,9 +192,9 @@ Common causes:
 - `fields_config` is missing from an API/workflow export.
 - `fields_config` contains invalid JSON.
 - A field is missing `id`, `name`, `type`, or `value`.
-- An `IMAGE` or `MASK` field has an empty or missing filename.
 - `Main_image` is empty or points to a missing file.
-- `API_mask_override_path` points to a missing or invalid file.
+- `API_mask_override_path` points to a missing file, invalid file, or absolute
+  local path instead of a ComfyUI input filename.
 - More than 24 fields are defined.
 
 ## Test Checklist
@@ -256,20 +231,15 @@ Common causes:
 22. Click `+ Dropdown`.
 23. Add options: `square, portrait, landscape`.
 24. Confirm the dropdown works and outputs `STRING`.
-25. Click `+ Image`, select/upload an image, connect it to Preview Image, and
-    confirm the image passes through.
-26. Click `+ Mask`, select/upload an image, and confirm a dynamic `MASK` output
-    appears after the fixed outputs.
-27. Click `+ Int`, `+ Float`, and `+ Boolean`.
-28. Confirm each creates the correct output socket type after the fixed outputs.
-29. Remove one field.
+25. Click `+ Int`, `+ Float`, and `+ Boolean`.
+26. Confirm each creates the correct output socket type after the fixed outputs.
+27. Remove one field.
 30. Confirm its output disappears and fixed outputs remain.
 31. Save the workflow.
 32. Reload the browser.
 33. Confirm all fixed and dynamic outputs are restored.
-34. Confirm `Main_image`, `API_mask_override_path`, and dynamic image/mask
-    filenames persist.
+34. Confirm `Main_image` and `API_mask_override_path` filenames persist.
 35. Export workflow/API format.
 36. Confirm `size_preset`, `width`, `height`, `User_prompt`, `Main_image`,
     `API_mask_override_path`, and `fields_config` are present.
-37. Run the workflow and confirm scalar, image, and mask values output correctly.
+37. Run the workflow and confirm scalar outputs work correctly.

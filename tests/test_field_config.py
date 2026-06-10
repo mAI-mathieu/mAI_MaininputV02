@@ -27,12 +27,6 @@ class FieldConfigTests(unittest.TestCase):
                 "type": "DROPDOWN",
                 "options": "1:1, 16:9, 9:16",
                 "value": "16:9"
-              },
-              {
-                "id": "field_3",
-                "name": "subject_mask",
-                "type": "mask",
-                "value": "mask.png"
               }
             ]
             """
@@ -54,14 +48,20 @@ class FieldConfigTests(unittest.TestCase):
                     "options": ["1:1", "16:9", "9:16"],
                     "value": "16:9",
                 },
-                {
-                    "id": "field_3",
-                    "name": "subject_mask",
-                    "type": "MASK",
-                    "value": "mask.png",
-                },
             ],
         )
+
+    def test_parse_fields_config_rejects_legacy_image_mask_fields(self):
+        legacy_configs = [
+            '[{"id": "field_1", "name": "ref_img", "type": "IMAGE", "value": "img.png"}]',
+            '[{"id": "field_1", "name": "ref_mask", "type": "MASK", "value": "mask.png"}]',
+        ]
+        for config in legacy_configs:
+            with self.assertRaisesRegex(
+                ValueError,
+                "dynamic IMAGE/MASK fields were removed and should be replaced by fixed Main_image/Main_mask"
+            ):
+                parse_fields_config(config)
 
     def test_parse_fields_config_requires_list(self):
         with self.assertRaisesRegex(ValueError, "must be a JSON list"):
