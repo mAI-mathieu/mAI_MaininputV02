@@ -1,11 +1,7 @@
-from .nodes.example_text_node import MAIExampleTextNode
+from .nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
 
-NODE_CLASS_MAPPINGS = {
-    "MAIExampleTextNode": MAIExampleTextNode,
-}
 
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "MAIExampleTextNode": "mAI Example Text Node",
-}
+WEB_DIRECTORY = "./web"
 
-__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+
+__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
