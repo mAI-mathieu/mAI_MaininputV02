@@ -48,7 +48,7 @@ export function ensureControls(node) {
 function setupFixedWidgets(node) {
     setupSizeWidgets(node);
     setupMainImageWidget(node);
-    setupApiMaskOverrideWidget(node);
+    setupMaskOverrideImageWidget(node);
 }
 
 
@@ -91,7 +91,7 @@ function setupSizeWidgets(node) {
 
 
 function setupMainImageWidget(node) {
-    const widget = findNodeWidget(node, "Main_image");
+    const widget = findNodeWidget(node, "image");
     if (!widget) {
         return;
     }
@@ -106,19 +106,19 @@ function setupMainImageWidget(node) {
 }
 
 
-function setupApiMaskOverrideWidget(node) {
-    const widget = findNodeWidget(node, "API_mask_override_path");
-    if (!widget || widget.__mAI_MainInputV02_apiMaskCallback) {
+function setupMaskOverrideImageWidget(node) {
+    const widget = findNodeWidget(node, "Mask_override_image");
+    if (!widget) {
         return;
     }
 
-    widget.__mAI_MainInputV02_apiMaskCallback = true;
-    const previousCallback = widget.callback;
-    widget.callback = (value, ...args) => {
-        widget.value = normalizeString(value);
-        previousCallback?.call(widget, widget.value, ...args);
-        markCanvasDirty();
-    };
+    widget.options ??= {};
+    widget.options.image_upload = true;
+
+    if (!widget.__mAI_MainInputV02_imageChoicesRefreshed) {
+        widget.__mAI_MainInputV02_imageChoicesRefreshed = true;
+        refreshImageChoices(widget, true);
+    }
 }
 
 
@@ -288,11 +288,14 @@ export function addStringValueWidget(node, name, value, callback) {
 }
 
 
-async function refreshImageChoices(widget) {
+async function refreshImageChoices(widget, isMaskOverride = false) {
     try {
         const response = await api.fetchApi("/object_info/LoadImage");
         const objectInfo = await response.json();
-        const values = objectInfo?.LoadImage?.input?.required?.image?.[0] ?? [];
+        let values = objectInfo?.LoadImage?.input?.required?.image?.[0] ?? [];
+        if (isMaskOverride) {
+            values = ["none", ...values.filter(v => v !== "none")];
+        }
         widget.options ??= {};
         widget.options.values = withCurrentValue(values, widget.value);
         markCanvasDirty();
