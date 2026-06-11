@@ -1,5 +1,5 @@
 import { api } from "../../../../scripts/api.js";
-import { DEFAULT_SIZE_PRESET, DEFAULT_WIDTH, DEFAULT_HEIGHT, MAX_FIELDS, SIZE_PRESETS } from "./constants.js";
+import { CONFIG_WIDGET, DEFAULT_SIZE_PRESET, DEFAULT_WIDTH, DEFAULT_HEIGHT, MAX_FIELDS, SIZE_PRESETS } from "./constants.js";
 import {
     normalizeBoolean,
     normalizeName,
@@ -37,10 +37,25 @@ const STATIC_IMAGE_WIDGETS = [
     },
 ];
 
+const REQUIRED_FIXED_WIDGET_NAMES = [
+    "size_preset",
+    "width",
+    "height",
+    "User_prompt",
+    "image",
+    "Mask_override_image",
+    CONFIG_WIDGET,
+];
+
 
 export function ensureControls(node) {
     setupFixedWidgets(node);
     hideFieldsConfigWidget(node);
+
+    if (!fixedBackendWidgetsReady(node)) {
+        markCanvasDirty();
+        return false;
+    }
 
     if (!node.__mAI_MainInputV02_controlsAdded) {
         node.__mAI_MainInputV02_controlsAdded = true;
@@ -52,6 +67,7 @@ export function ensureControls(node) {
     }
 
     markCanvasDirty();
+    return true;
 }
 
 
@@ -59,6 +75,11 @@ function setupFixedWidgets(node) {
     setupSizeWidgets(node);
     setupMainImageWidget(node);
     setupMaskOverrideImageWidget(node);
+}
+
+
+function fixedBackendWidgetsReady(node) {
+    return REQUIRED_FIXED_WIDGET_NAMES.every((name) => findNodeWidget(node, name));
 }
 
 
@@ -427,7 +448,9 @@ export function resizeNode(node) {
 
 
 export function rebuildFromConfig(node) {
-    ensureControls(node);
+    if (!ensureControls(node)) {
+        return;
+    }
 
     let fields;
     try {

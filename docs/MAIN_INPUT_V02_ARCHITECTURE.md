@@ -21,6 +21,13 @@ Fixed outputs always appear first in this order:
 4. `Main_image`
 5. `Main_mask`
 
+Do not manually reorder native ComfyUI image widgets.
+Do not move fields_config.
+Do not suppress native image preview.
+Do not custom-draw image preview until everything else is isolated.
+Let ComfyUI handle image widgets.
+Use fields_config only as hidden serialized data for dynamic scalar fields.
+
 Dynamic field outputs start after them.
 
 ## Serialized State
@@ -37,6 +44,12 @@ not become independent serialized state.
 them directly. When `size_preset` is `custom`, the supplied `width` and `height`
 values are used. Non-custom presets resolve to their mapped dimensions in the
 backend.
+
+The backend `INPUT_TYPES` order is `size_preset`, `width`, `height`,
+`User_prompt`, `image` (displayed as `Main_image`), `Mask_override_image`, then
+`fields_config`. Frontend dynamic field buttons are added only after those
+fixed backend widgets exist, so the native image widgets stay before dynamic
+scalar field controls without manually reordering `node.widgets`.
 
 `User_prompt`, `Main_image`, and `Mask_override_image` are not stored in
 `fields_config`. `Mask_override_image` is a regular image select/upload widget
@@ -80,6 +93,8 @@ To prevent race conditions during ComfyUI reload, the frontend tracks a node-ins
 
 By waiting 50ms, the restore pass ensures that ComfyUI has fully loaded all serialized widgets, established links, and set values.
 The rebuild reads `fields_config`, removes previous dynamic field widgets, recreates the visible field widgets, and normalizes the output sockets. Output normalization always emits fixed `width`, `height`, `User_prompt`, `Main_image`, and `Main_mask` descriptors first, then appends dynamic field descriptors.
+If the fixed backend widgets are not present yet, the frontend does not add the
+dynamic field buttons or rebuild dynamic widgets during that pass.
 
 For stability, the frontend intentionally does not create custom image preview
 widgets, suppress ComfyUI's native image preview, relabel native upload buttons,
