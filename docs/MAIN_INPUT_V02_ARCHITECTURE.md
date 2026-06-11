@@ -26,8 +26,11 @@ Dynamic field outputs start after them.
 ## Serialized State
 
 The hidden `fields_config` widget is the source of truth for workflow save/load
-and API export. Dynamic field widgets are marked with `serialize = false`, so
-they do not become independent serialized state.
+and API export. It must remain present in `node.widgets` and serializable even
+while hidden. Frontend layout code must treat it as protected state: it must
+not be moved, removed, used as an upload/image widget, or used as a layout
+spacer. Dynamic field widgets are marked with `serialize = false`, so they do
+not become independent serialized state.
 
 `size_preset`, `width`, `height`, `User_prompt`, `image` (the internal name of the main image widget), and
 `Mask_override_image` are ordinary serialized widgets. API workflows can set
@@ -58,8 +61,9 @@ or sessionStorage.
   descriptors, and field type maps.
 - `field_config.js`: field parsing, validation, normalization, and
   serialization.
-- `node_state.js`: hidden config widget access, per-node field state, canvas
-  dirty marking, warnings, and rebuild scheduling.
+- `node_state.js`: hidden config widget access, per-node field state,
+  fields_config recovery, canvas dirty marking, warnings, and rebuild
+  scheduling.
 - `field_widgets.js`: fixed size widget callbacks, fixed image/mask widget
   layout, fixed image/mask preview widgets, add/remove field controls, dynamic
   widget creation, widget relabeling, resize behavior, and `rebuildFromConfig`.
@@ -90,6 +94,15 @@ execution. If ComfyUI creates its own node-wide canvas image preview widget,
 the frontend suppresses that duplicate and keeps `Main_image` as the node image
 preview reference used by image actions such as the mask editor; selecting
 `Mask_override_image` does not replace the `Main_image` preview reference.
+Custom preview drawing scales the selected image to the node's available inner
+width while preserving aspect ratio and capping height to a sane maximum.
+
+Because ComfyUI restores serialized widget values from the widget list, image
+layout reordering never moves the hidden `fields_config` widget and never uses
+it as an upload candidate or reorder target. If a workflow was saved during the
+older widget-order bug, the frontend can temporarily recover `fields_config`
+from the mask widget during rebuild and write it back to the hidden config
+widget.
 
 The rebuild does not remove outputs with `node.removeOutput()` in a broad loop. Instead, `normalizeOutputsAfterLoad` builds the expected output list and migrates links from the best matching existing outputs. This removes unlinked fallback `out_1` to `out_24` sockets while preserving restored links, including links from the fixed `width`, `height`, `User_prompt`, `Main_image`, and `Main_mask` outputs. If an unexpected extra output still has restored links, it is appended instead of discarded.
 

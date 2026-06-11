@@ -1,6 +1,6 @@
 import { api } from "../../../../scripts/api.js";
 import { app } from "../../../../scripts/app.js";
-import { DEFAULT_SIZE_PRESET, DEFAULT_WIDTH, DEFAULT_HEIGHT, MAX_FIELDS, SIZE_PRESETS } from "./constants.js";
+import { CONFIG_WIDGET, DEFAULT_SIZE_PRESET, DEFAULT_WIDTH, DEFAULT_HEIGHT, MAX_FIELDS, SIZE_PRESETS } from "./constants.js";
 import {
     normalizeBoolean,
     normalizeName,
@@ -29,7 +29,7 @@ let nextRuntimeId = 1;
 
 const NATIVE_CANVAS_IMAGE_PREVIEW_WIDGET = "$$canvas-image-preview";
 const IMAGE_PREVIEW_MIN_HEIGHT = 96;
-const IMAGE_PREVIEW_MAX_HEIGHT = 220;
+const IMAGE_PREVIEW_MAX_HEIGHT = 320;
 const IMAGE_PREVIEW_LOADING_HEIGHT = 160;
 const IMAGE_PREVIEW_MARGIN = 15;
 
@@ -483,7 +483,7 @@ export function removeDynamicFieldWidgets(node) {
         return;
     }
 
-    node.widgets = node.widgets.filter((widget) => !widget.__mAI_MainInputV02_dynamicField);
+    node.widgets = node.widgets.filter((widget) => widget.__mAI_MainInputV02_dynamicField !== true);
     node.__mAI_MainInputV02_fieldWidgets = {};
 }
 
@@ -598,7 +598,7 @@ function getImagePreviewHeight(widget, width) {
     }
 
     const availableWidth = Math.max(1, (width ?? 210) - IMAGE_PREVIEW_MARGIN * 2);
-    const scale = Math.min(1, availableWidth / Math.max(1, image.naturalWidth || image.width || 1));
+    const scale = availableWidth / Math.max(1, image.naturalWidth || image.width || 1);
     const scaledHeight = (image.naturalHeight || image.height || IMAGE_PREVIEW_LOADING_HEIGHT) * scale;
     return Math.max(IMAGE_PREVIEW_MIN_HEIGHT, Math.min(IMAGE_PREVIEW_MAX_HEIGHT, scaledHeight + 12));
 }
@@ -632,7 +632,7 @@ function drawImagePreviewWidget(ctx, node, widget, width, y, height) {
 
         const imageWidth = image.naturalWidth || image.width || 1;
         const imageHeight = image.naturalHeight || image.height || 1;
-        const scale = Math.min(boxWidth / imageWidth, boxHeight / imageHeight, 1);
+        const scale = Math.min(boxWidth / imageWidth, boxHeight / imageHeight);
         const drawWidth = imageWidth * scale;
         const drawHeight = imageHeight * scale;
         const drawX = left + (boxWidth - drawWidth) / 2;
@@ -669,7 +669,7 @@ function assignStaticImageUploadWidgets(node) {
 
 
 function isStaticImageUploadCandidate(widget) {
-    if (!widget || widget.type !== "button") {
+    if (!widget || widget.name === CONFIG_WIDGET || widget.type === "hidden" || widget.type !== "button") {
         return false;
     }
     if (widget.__mAI_MainInputV02_control || widget.__mAI_MainInputV02_dynamicField) {
@@ -922,6 +922,9 @@ function reorderStaticImageWidgets(node) {
 
 function moveWidgetAfter(node, widgetToMove, targetWidget) {
     if (!node.widgets || !widgetToMove || !targetWidget || widgetToMove === targetWidget) {
+        return;
+    }
+    if (widgetToMove.name === CONFIG_WIDGET || targetWidget.name === CONFIG_WIDGET) {
         return;
     }
 
