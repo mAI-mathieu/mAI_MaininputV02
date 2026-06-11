@@ -1,6 +1,5 @@
 import { api } from "../../../../scripts/api.js";
-import { app } from "../../../../scripts/app.js";
-import { CONFIG_WIDGET, DEFAULT_SIZE_PRESET, DEFAULT_WIDTH, DEFAULT_HEIGHT, MAX_FIELDS, SIZE_PRESETS } from "./constants.js";
+import { DEFAULT_SIZE_PRESET, DEFAULT_WIDTH, DEFAULT_HEIGHT, MAX_FIELDS, SIZE_PRESETS } from "./constants.js";
 import {
     normalizeBoolean,
     normalizeName,
@@ -27,32 +26,16 @@ import {
 
 let nextRuntimeId = 1;
 
-const NATIVE_CANVAS_IMAGE_PREVIEW_WIDGET = "$$canvas-image-preview";
-const IMAGE_PREVIEW_MIN_HEIGHT = 96;
-const IMAGE_PREVIEW_MAX_HEIGHT = 320;
-const IMAGE_PREVIEW_LOADING_HEIGHT = 160;
-const IMAGE_PREVIEW_MARGIN = 15;
-
 const STATIC_IMAGE_WIDGETS = [
     {
         widgetName: "image",
         displayName: "Main_image",
-        previewWidgetName: "__mAI_MainInputV02_Main_image_preview",
-        uploadLabel: "choose main image to upload",
-        emptyValues: new Set([""]),
-        keepNodeImagePreview: true,
     },
     {
         widgetName: "Mask_override_image",
         displayName: "Mask_override_image",
-        previewWidgetName: "__mAI_MainInputV02_Mask_override_image_preview",
-        uploadLabel: "choose mask override to upload",
-        emptyValues: new Set(["", "none"]),
-        keepNodeImagePreview: false,
     },
 ];
-
-const FIELD_CONTROL_BUTTON_NAMES = ["+ String", "+ Dropdown", "+ Int", "+ Float", "+ Boolean"];
 
 
 export function ensureControls(node) {
@@ -68,7 +51,7 @@ export function ensureControls(node) {
         addButton(node, "+ Boolean", () => addField(node, "BOOLEAN"));
     }
 
-    syncStaticImageWidgets(node);
+    markCanvasDirty();
 }
 
 
@@ -155,76 +138,10 @@ function setupImageWidget(node, config, isMaskOverride = false) {
     widget.options ??= {};
     widget.options.image_upload = true;
 
-    wrapImageWidgetCallback(node, widget, config);
-    wrapNodeWidgetChanged(node);
-
     if (!widget.__mAI_MainInputV02_imageChoicesRefreshed) {
         widget.__mAI_MainInputV02_imageChoicesRefreshed = true;
         refreshImageChoices(widget, isMaskOverride);
     }
-}
-
-
-function wrapImageWidgetCallback(node, widget, config) {
-    if (widget.callback === widget.__mAI_MainInputV02_wrappedImageCallback) {
-        return;
-    }
-
-    const originalCallback = widget.callback;
-    const wrappedCallback = function (...args) {
-        let result;
-        if (config.keepNodeImagePreview) {
-            result = originalCallback?.apply(this, args);
-        } else {
-            markCanvasDirty();
-        }
-
-        scheduleStaticImageWidgetSync(node);
-        return result;
-    };
-
-    widget.__mAI_MainInputV02_wrappedImageCallback = wrappedCallback;
-    widget.__mAI_MainInputV02_originalImageCallback = originalCallback;
-    widget.callback = wrappedCallback;
-}
-
-
-function wrapNodeWidgetChanged(node) {
-    if (node.onWidgetChanged === node.__mAI_MainInputV02_wrappedOnWidgetChanged) {
-        return;
-    }
-
-    const originalOnWidgetChanged = node.onWidgetChanged;
-    const wrappedOnWidgetChanged = function (...args) {
-        const result = originalOnWidgetChanged?.apply(this, args);
-        const widgetName = args[0];
-        const widget = args[3];
-        if (isStaticImageWidgetName(widgetName) || isStaticImageWidgetName(widget?.name)) {
-            scheduleStaticImageWidgetSync(node);
-        }
-        return result;
-    };
-
-    node.__mAI_MainInputV02_wrappedOnWidgetChanged = wrappedOnWidgetChanged;
-    node.onWidgetChanged = wrappedOnWidgetChanged;
-}
-
-
-function isStaticImageWidgetName(name) {
-    return STATIC_IMAGE_WIDGETS.some((config) => config.widgetName === name);
-}
-
-
-function scheduleStaticImageWidgetSync(node) {
-    if (node.__mAI_MainInputV02_imageWidgetSyncTimer) {
-        clearTimeout(node.__mAI_MainInputV02_imageWidgetSyncTimer);
-    }
-
-    node.__mAI_MainInputV02_imageWidgetSyncTimer = setTimeout(() => {
-        node.__mAI_MainInputV02_imageWidgetSyncTimer = null;
-        syncStaticImageWidgets(node);
-        resizeNode(node);
-    }, 0);
 }
 
 
@@ -262,7 +179,6 @@ export function addField(node, type) {
     writeFieldsConfig(node, fields);
     addFieldWidgets(node, field);
     addOutputForField(node, field);
-    syncStaticImageWidgets(node);
     resizeNode(node);
 }
 
@@ -473,7 +389,6 @@ export function removeField(node, fieldId) {
     removeWidgetsForField(node, fieldId);
     removeOutputForField(node, fieldId, index);
     writeFieldsConfig(node, fields);
-    syncStaticImageWidgets(node);
     resizeNode(node);
 }
 
@@ -529,418 +444,7 @@ export function rebuildFromConfig(node) {
     }
 
     normalizeOutputsAfterLoad(node, fields);
-    syncStaticImageWidgets(node);
     resizeNode(node);
-}
-
-
-function syncStaticImageWidgets(node) {
-    ensureStaticImagePreviewWidgets(node);
-    assignStaticImageUploadWidgets(node);
-    suppressNativeCanvasImagePreview(node);
-    refreshStaticImagePreviewWidgets(node);
-    reorderStaticImageWidgets(node);
-}
-
-
-function ensureStaticImagePreviewWidgets(node) {
-    if (!node.widgets) {
-        return;
-    }
-
-    for (const config of STATIC_IMAGE_WIDGETS) {
-        if (findNodeWidget(node, config.previewWidgetName)) {
-            continue;
-        }
-
-        node.addCustomWidget(createImagePreviewWidget(node, config));
-    }
-}
-
-
-function createImagePreviewWidget(node, config) {
-    const widget = {
-        type: "custom",
-        name: config.previewWidgetName,
-        value: "",
-        y: 0,
-        serialize: false,
-        hidden: true,
-        __mAI_MainInputV02_staticImagePreview: true,
-        __mAI_MainInputV02_imageWidgetName: config.widgetName,
-        __mAI_MainInputV02_keepNodeImagePreview: config.keepNodeImagePreview,
-        computeSize(width) {
-            return [width ?? node.size?.[0] ?? 210, getImagePreviewHeight(this, width)];
-        },
-        computeLayoutSize() {
-            return {
-                minHeight: Math.max(0, getImagePreviewHeight(this, node.size?.[0])),
-                minWidth: 1,
-            };
-        },
-        draw(ctx, drawNode, width, y, height) {
-            drawImagePreviewWidget(ctx, drawNode, this, width, y, height);
-        },
-    };
-
-    return widget;
-}
-
-
-function getImagePreviewHeight(widget, width) {
-    if (widget.hidden || !widget.__mAI_MainInputV02_hasPreviewValue) {
-        return -4;
-    }
-
-    const image = widget.__mAI_MainInputV02_previewImage;
-    if (!image) {
-        return IMAGE_PREVIEW_LOADING_HEIGHT;
-    }
-
-    const availableWidth = Math.max(1, (width ?? 210) - IMAGE_PREVIEW_MARGIN * 2);
-    const scale = availableWidth / Math.max(1, image.naturalWidth || image.width || 1);
-    const scaledHeight = (image.naturalHeight || image.height || IMAGE_PREVIEW_LOADING_HEIGHT) * scale;
-    return Math.max(IMAGE_PREVIEW_MIN_HEIGHT, Math.min(IMAGE_PREVIEW_MAX_HEIGHT, scaledHeight + 12));
-}
-
-
-function drawImagePreviewWidget(ctx, node, widget, width, y, height) {
-    if (widget.hidden || !widget.__mAI_MainInputV02_hasPreviewValue || height <= 0) {
-        return;
-    }
-
-    const left = IMAGE_PREVIEW_MARGIN;
-    const top = y + 4;
-    const boxWidth = Math.max(1, width - IMAGE_PREVIEW_MARGIN * 2);
-    const boxHeight = Math.max(1, height - 8);
-
-    ctx.save();
-    ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
-    ctx.beginPath();
-    ctx.roundRect(left, top, boxWidth, boxHeight, 6);
-    ctx.fill();
-    ctx.stroke();
-
-    const image = widget.__mAI_MainInputV02_previewImage;
-    if (image) {
-        if (widget.__mAI_MainInputV02_keepNodeImagePreview && node) {
-            node.previewMediaType = "image";
-            node.imgs = [image];
-            node.imageIndex = 0;
-        }
-
-        const imageWidth = image.naturalWidth || image.width || 1;
-        const imageHeight = image.naturalHeight || image.height || 1;
-        const scale = Math.min(boxWidth / imageWidth, boxHeight / imageHeight);
-        const drawWidth = imageWidth * scale;
-        const drawHeight = imageHeight * scale;
-        const drawX = left + (boxWidth - drawWidth) / 2;
-        const drawY = top + (boxHeight - drawHeight) / 2;
-        ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
-    }
-
-    ctx.restore();
-}
-
-
-function assignStaticImageUploadWidgets(node) {
-    if (!node.widgets) {
-        return;
-    }
-
-    const candidates = node.widgets.filter(isStaticImageUploadCandidate);
-    const unassigned = candidates.filter((widget) => !widget.__mAI_MainInputV02_staticImageUploadFor);
-
-    for (const config of STATIC_IMAGE_WIDGETS) {
-        let uploadWidget = candidates.find(
-            (widget) => widget.__mAI_MainInputV02_staticImageUploadFor === config.widgetName
-        );
-
-        if (!uploadWidget) {
-            uploadWidget = takeUploadCandidateForConfig(node, unassigned, config);
-        }
-
-        if (uploadWidget) {
-            configureStaticImageUploadWidget(uploadWidget, config);
-        }
-    }
-}
-
-
-function isStaticImageUploadCandidate(widget) {
-    if (!widget || widget.name === CONFIG_WIDGET || widget.type === "hidden" || widget.type !== "button") {
-        return false;
-    }
-    if (widget.__mAI_MainInputV02_control || widget.__mAI_MainInputV02_dynamicField) {
-        return false;
-    }
-    if (widget.__mAI_MainInputV02_staticImageUploadFor) {
-        return true;
-    }
-
-    const name = normalizeString(widget.name).toLowerCase();
-    const label = normalizeString(widget.label).toLowerCase();
-    const value = normalizeString(widget.value).toLowerCase();
-
-    return (
-        value === "image" ||
-        name === "upload" ||
-        name.startsWith("upload_") ||
-        name === "choose file to upload" ||
-        label === "choose file to upload"
-    );
-}
-
-
-function takeUploadCandidateForConfig(node, unassigned, config) {
-    const selector = findNodeWidget(node, config.widgetName);
-    const selectorIndex = node.widgets.indexOf(selector);
-    if (selectorIndex < 0) {
-        return unassigned.shift();
-    }
-
-    const nextSelectorIndex = STATIC_IMAGE_WIDGETS
-        .map((candidateConfig) => findNodeWidget(node, candidateConfig.widgetName))
-        .map((widget) => node.widgets.indexOf(widget))
-        .filter((index) => index > selectorIndex)
-        .sort((a, b) => a - b)[0] ?? Infinity;
-
-    let candidateIndex = unassigned.findIndex((widget) => {
-        const index = node.widgets.indexOf(widget);
-        return index > selectorIndex && index < nextSelectorIndex;
-    });
-
-    if (candidateIndex < 0) {
-        candidateIndex = unassigned.findIndex((widget) => node.widgets.indexOf(widget) > selectorIndex);
-    }
-    if (candidateIndex < 0) {
-        candidateIndex = 0;
-    }
-
-    const [candidate] = unassigned.splice(candidateIndex, 1);
-    return candidate;
-}
-
-
-function configureStaticImageUploadWidget(widget, config) {
-    widget.__mAI_MainInputV02_staticImageUploadFor = config.widgetName;
-    widget.name = config.uploadLabel;
-    widget.label = config.uploadLabel;
-    widget.localized_name = config.uploadLabel;
-    widget.serialize = false;
-}
-
-
-function suppressNativeCanvasImagePreview(node) {
-    if (!node.widgets) {
-        return;
-    }
-
-    for (const widget of node.widgets) {
-        if (widget.name !== NATIVE_CANVAS_IMAGE_PREVIEW_WIDGET) {
-            continue;
-        }
-
-        widget.__mAI_MainInputV02_nativePreviewSuppressed = true;
-        widget.hidden = true;
-        widget.serialize = false;
-        widget.computeSize = () => [0, -4];
-        widget.computeLayoutSize = () => ({ minHeight: 0, minWidth: 0, maxHeight: 0, maxWidth: 0 });
-    }
-}
-
-
-function refreshStaticImagePreviewWidgets(node) {
-    for (const config of STATIC_IMAGE_WIDGETS) {
-        const previewWidget = findNodeWidget(node, config.previewWidgetName);
-        const selectorWidget = findNodeWidget(node, config.widgetName);
-        if (!previewWidget || !selectorWidget) {
-            continue;
-        }
-
-        refreshStaticImagePreviewWidget(node, previewWidget, selectorWidget, config);
-    }
-}
-
-
-function refreshStaticImagePreviewWidget(node, previewWidget, selectorWidget, config) {
-    const value = normalizeString(selectorWidget.value);
-    const hasPreviewValue = Boolean(value) && !config.emptyValues.has(value);
-
-    previewWidget.__mAI_MainInputV02_hasPreviewValue = hasPreviewValue;
-    previewWidget.hidden = !hasPreviewValue;
-
-    if (!hasPreviewValue) {
-        previewWidget.__mAI_MainInputV02_previewValue = "";
-        previewWidget.__mAI_MainInputV02_previewImage = null;
-        previewWidget.__mAI_MainInputV02_previewLoading = false;
-        if (config.keepNodeImagePreview) {
-            node.images = undefined;
-        }
-        return;
-    }
-
-    const parsedValue = parseAnnotatedImageValue(value);
-    if (config.keepNodeImagePreview) {
-        node.previewMediaType = "image";
-        node.images = parsedValue ? [{ ...parsedValue }] : undefined;
-    }
-
-    if (previewWidget.__mAI_MainInputV02_previewValue === value && previewWidget.__mAI_MainInputV02_previewImage) {
-        return;
-    }
-
-    const url = imageValueToViewUrl(value);
-    if (!url) {
-        previewWidget.__mAI_MainInputV02_previewValue = value;
-        previewWidget.__mAI_MainInputV02_previewImage = null;
-        previewWidget.__mAI_MainInputV02_previewLoading = false;
-        return;
-    }
-
-    const token = `${value}:${Date.now()}:${Math.random()}`;
-    previewWidget.__mAI_MainInputV02_previewToken = token;
-    previewWidget.__mAI_MainInputV02_previewValue = value;
-    previewWidget.__mAI_MainInputV02_previewImage = null;
-    previewWidget.__mAI_MainInputV02_previewLoading = true;
-
-    const image = new Image();
-    image.onload = () => {
-        if (previewWidget.__mAI_MainInputV02_previewToken !== token) {
-            return;
-        }
-
-        previewWidget.__mAI_MainInputV02_previewImage = image;
-        previewWidget.__mAI_MainInputV02_previewLoading = false;
-        if (config.keepNodeImagePreview) {
-            node.imgs = [image];
-            node.imageIndex = 0;
-        }
-        resizeNode(node);
-        markCanvasDirty();
-    };
-    image.onerror = () => {
-        if (previewWidget.__mAI_MainInputV02_previewToken !== token) {
-            return;
-        }
-
-        previewWidget.__mAI_MainInputV02_previewImage = null;
-        previewWidget.__mAI_MainInputV02_previewLoading = false;
-        resizeNode(node);
-        markCanvasDirty();
-    };
-    image.src = url;
-}
-
-
-function parseAnnotatedImageValue(value) {
-    let path = normalizeString(value);
-    if (!path || path === "none") {
-        return null;
-    }
-
-    let type = "input";
-    const annotation = path.match(/\s+\[(input|output|temp)\]$/i);
-    if (annotation) {
-        type = annotation[1].toLowerCase();
-        path = path.slice(0, annotation.index).trim();
-    }
-
-    path = path.replace(/\\/g, "/");
-    const slashIndex = path.lastIndexOf("/");
-    const filename = slashIndex >= 0 ? path.slice(slashIndex + 1) : path;
-    const subfolder = slashIndex >= 0 ? path.slice(0, slashIndex) : "";
-
-    if (!filename) {
-        return null;
-    }
-
-    return { filename, subfolder, type };
-}
-
-
-function imageValueToViewUrl(value) {
-    const parsed = parseAnnotatedImageValue(value);
-    if (!parsed) {
-        return "";
-    }
-
-    const params = new URLSearchParams();
-    params.set("filename", parsed.filename);
-    params.set("type", parsed.type);
-    params.set("subfolder", parsed.subfolder);
-
-    const path = `/view?${params.toString()}`;
-    if (typeof api.apiURL === "function") {
-        return api.apiURL(path);
-    }
-    return path;
-}
-
-
-function reorderStaticImageWidgets(node) {
-    if (!node.widgets) {
-        return;
-    }
-
-    let target = findNodeWidget(node, "User_prompt") ?? findNodeWidget(node, "height");
-    for (const config of STATIC_IMAGE_WIDGETS) {
-        const selector = findNodeWidget(node, config.widgetName);
-        const preview = findNodeWidget(node, config.previewWidgetName);
-        const upload = node.widgets.find(
-            (widget) => widget.__mAI_MainInputV02_staticImageUploadFor === config.widgetName
-        );
-
-        for (const widget of [selector, preview, upload]) {
-            if (!widget) {
-                continue;
-            }
-            if (target) {
-                moveWidgetAfter(node, widget, target);
-            }
-            target = widget;
-        }
-    }
-
-    for (const buttonName of FIELD_CONTROL_BUTTON_NAMES) {
-        const button = node.widgets.find(
-            (widget) => widget.__mAI_MainInputV02_control && widget.name === buttonName
-        );
-        if (!button) {
-            continue;
-        }
-        if (target) {
-            moveWidgetAfter(node, button, target);
-        }
-        target = button;
-    }
-
-    markCanvasDirty();
-}
-
-
-function moveWidgetAfter(node, widgetToMove, targetWidget) {
-    if (!node.widgets || !widgetToMove || !targetWidget || widgetToMove === targetWidget) {
-        return;
-    }
-    if (widgetToMove.name === CONFIG_WIDGET || targetWidget.name === CONFIG_WIDGET) {
-        return;
-    }
-
-    const currentIndex = node.widgets.indexOf(widgetToMove);
-    if (currentIndex < 0) {
-        return;
-    }
-
-    node.widgets.splice(currentIndex, 1);
-    const targetIndex = node.widgets.indexOf(targetWidget);
-    if (targetIndex < 0) {
-        node.widgets.splice(currentIndex, 0, widgetToMove);
-        return;
-    }
-
-    node.widgets.splice(targetIndex + 1, 0, widgetToMove);
 }
 
 

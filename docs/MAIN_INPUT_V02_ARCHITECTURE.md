@@ -64,9 +64,9 @@ or sessionStorage.
 - `node_state.js`: hidden config widget access, per-node field state,
   fields_config recovery, canvas dirty marking, warnings, and rebuild
   scheduling.
-- `field_widgets.js`: fixed size widget callbacks, fixed image/mask widget
-  layout, fixed image/mask preview widgets, add/remove field controls, dynamic
-  widget creation, widget relabeling, resize behavior, and `rebuildFromConfig`.
+- `field_widgets.js`: fixed size widget callbacks, safe image/mask widget
+  setup and image list refresh, add/remove field controls, dynamic widget
+  creation, widget relabeling, resize behavior, and `rebuildFromConfig`.
 - `output_sync.js`: output socket creation/removal/rename and link-preserving
   reload normalization.
 
@@ -81,28 +81,18 @@ To prevent race conditions during ComfyUI reload, the frontend tracks a node-ins
 By waiting 50ms, the restore pass ensures that ComfyUI has fully loaded all serialized widgets, established links, and set values.
 The rebuild reads `fields_config`, removes previous dynamic field widgets, recreates the visible field widgets, and normalizes the output sockets. Output normalization always emits fixed `width`, `height`, `User_prompt`, `Main_image`, and `Main_mask` descriptors first, then appends dynamic field descriptors.
 
-The frontend also keeps the fixed image/mask UI grouped above the dynamic
-field controls. The visual order is `image` (displayed as `Main_image`), its
-non-serialized preview, its upload button, `Mask_override_image`, its optional
-non-serialized preview, its upload button, then the dynamic field buttons and
-dynamic scalar widgets. The upload buttons are per-widget controls labeled
-`choose main image to upload` and `choose mask override to upload`.
-
-The fixed image/mask previews are per-node runtime widgets only. They are not
-stored in `fields_config`, do not add API inputs, and do not change backend
-execution. If ComfyUI creates its own node-wide canvas image preview widget,
-the frontend suppresses that duplicate and keeps `Main_image` as the node image
-preview reference used by image actions such as the mask editor; selecting
-`Mask_override_image` does not replace the `Main_image` preview reference.
-Custom preview drawing scales the selected image to the node's available inner
-width while preserving aspect ratio and capping height to a sane maximum.
+For stability, the frontend intentionally does not create custom image preview
+widgets, suppress ComfyUI's native image preview, relabel native upload buttons,
+or manually reorder `node.widgets`. Native ComfyUI image widget behavior is
+preferred for `image` and `Mask_override_image`, even if ComfyUI places its
+preview or upload controls lower in the node than the dynamic controls.
 
 Because ComfyUI restores serialized widget values from the widget list, image
-layout reordering never moves the hidden `fields_config` widget and never uses
-it as an upload candidate or reorder target. If a workflow was saved during the
-older widget-order bug, the frontend can temporarily recover `fields_config`
-from the mask widget during rebuild and write it back to the hidden config
-widget.
+layout code must never move the hidden `fields_config` widget and never use it
+as an upload candidate, image widget, layout spacer, or reorder target. If a
+workflow was saved during the older widget-order bug, the frontend can
+temporarily recover `fields_config` from the mask widget during rebuild and
+write it back to the hidden config widget.
 
 The rebuild does not remove outputs with `node.removeOutput()` in a broad loop. Instead, `normalizeOutputsAfterLoad` builds the expected output list and migrates links from the best matching existing outputs. This removes unlinked fallback `out_1` to `out_24` sockets while preserving restored links, including links from the fixed `width`, `height`, `User_prompt`, `Main_image`, and `Main_mask` outputs. If an unexpected extra output still has restored links, it is appended instead of discarded.
 
