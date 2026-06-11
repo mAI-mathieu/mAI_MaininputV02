@@ -33,6 +33,7 @@ export function ensureControls(node) {
     hideFieldsConfigWidget(node);
 
     if (node.__mAI_MainInputV02_controlsAdded) {
+        reorderWidgets(node);
         return;
     }
 
@@ -42,6 +43,8 @@ export function ensureControls(node) {
     addButton(node, "+ Int", () => addField(node, "INT"));
     addButton(node, "+ Float", () => addField(node, "FLOAT"));
     addButton(node, "+ Boolean", () => addField(node, "BOOLEAN"));
+
+    reorderWidgets(node);
 }
 
 
@@ -64,6 +67,12 @@ function setupSizeWidgets(node) {
     if (!sizePresetWidget.__mAI_MainInputV02_sizeCallback) {
         sizePresetWidget.__mAI_MainInputV02_sizeCallback = true;
         sizePresetWidget.callback = (value) => {
+            if (node.__mAI_MainInputV02_restoring) {
+                if (value !== undefined) {
+                    sizePresetWidget.value = value;
+                }
+                return;
+            }
             const presetName = normalizeString(value || DEFAULT_SIZE_PRESET);
             sizePresetWidget.value = presetName;
             applySizePreset(sizePresetWidget, widthWidget, heightWidget, presetName);
@@ -73,6 +82,12 @@ function setupSizeWidgets(node) {
     if (!widthWidget.__mAI_MainInputV02_sizeCallback) {
         widthWidget.__mAI_MainInputV02_sizeCallback = true;
         widthWidget.callback = (value) => {
+            if (node.__mAI_MainInputV02_restoring) {
+                if (value !== undefined) {
+                    widthWidget.value = value;
+                }
+                return;
+            }
             widthWidget.value = normalizeValue(value ?? DEFAULT_WIDTH, "INT");
             sizePresetWidget.value = DEFAULT_SIZE_PRESET;
             markCanvasDirty();
@@ -82,6 +97,12 @@ function setupSizeWidgets(node) {
     if (!heightWidget.__mAI_MainInputV02_sizeCallback) {
         heightWidget.__mAI_MainInputV02_sizeCallback = true;
         heightWidget.callback = (value) => {
+            if (node.__mAI_MainInputV02_restoring) {
+                if (value !== undefined) {
+                    heightWidget.value = value;
+                }
+                return;
+            }
             heightWidget.value = normalizeValue(value ?? DEFAULT_HEIGHT, "INT");
             sizePresetWidget.value = DEFAULT_SIZE_PRESET;
             markCanvasDirty();
@@ -156,6 +177,7 @@ export function addField(node, type) {
     writeFieldsConfig(node, fields);
     addFieldWidgets(node, field);
     addOutputForField(node, field);
+    reorderWidgets(node);
     resizeNode(node);
 }
 
@@ -366,6 +388,7 @@ export function removeField(node, fieldId) {
     removeWidgetsForField(node, fieldId);
     removeOutputForField(node, fieldId, index);
     writeFieldsConfig(node, fields);
+    reorderWidgets(node);
     resizeNode(node);
 }
 
@@ -421,5 +444,125 @@ export function rebuildFromConfig(node) {
     }
 
     normalizeOutputsAfterLoad(node, fields);
+    reorderWidgets(node);
     resizeNode(node);
+}
+
+
+export function reorderWidgets(node) {
+    if (!node.widgets) {
+        return;
+    }
+
+    const size_preset = node.widgets.find((w) => w.name === "size_preset");
+    const width = node.widgets.find((w) => w.name === "width");
+    const height = node.widgets.find((w) => w.name === "height");
+    const User_prompt = node.widgets.find((w) => w.name === "User_prompt");
+    const image = node.widgets.find((w) => w.name === "image");
+    const Mask_override_image = node.widgets.find((w) => w.name === "Mask_override_image");
+    const fields_config = node.widgets.find((w) => w.name === "fields_config");
+
+    // Extract all other widgets
+    const otherWidgets = node.widgets.filter((w) =>
+        w !== size_preset &&
+        w !== width &&
+        w !== height &&
+        w !== User_prompt &&
+        w !== image &&
+        w !== Mask_override_image &&
+        w !== fields_config
+    );
+
+    // Dynamic controls: "+ String", "+ Dropdown", etc.
+    const dynamic_controls = otherWidgets.filter((w) => w.__mAI_MainInputV02_control);
+
+    // Dynamic field widgets (name, value, remove buttons)
+    const dynamic_widgets = otherWidgets.filter((w) => w.__mAI_MainInputV02_dynamicField);
+
+    // Remaining widgets are upload buttons or previews created by ComfyUI
+    const remaining = otherWidgets.filter((w) => !w.__mAI_MainInputV02_control && !w.__mAI_MainInputV02_dynamicField);
+
+    // Find upload buttons among remaining
+    const upload_buttons = remaining.filter((w) =>
+        w.type === "button" &&
+        (w.name?.toLowerCase().includes("choose") ||
+         w.label?.toLowerCase().includes("choose") ||
+         w.name?.toLowerCase().includes("upload") ||
+         w.label?.toLowerCase().includes("upload"))
+    );
+
+    // Previews are remaining widgets that are NOT upload buttons
+    const previews = remaining.filter((w) => !upload_buttons.includes(w));
+
+    // Distribute upload buttons and previews to image and Mask_override_image
+    // Since 'image' is processed first, the first upload button/preview belongs to 'image'
+    // and the second belongs to 'Mask_override_image'
+    const main_image_button = upload_buttons[0];
+    const mask_override_button = upload_buttons[1];
+
+    const main_image_preview = previews[0];
+    const mask_override_preview = previews[1];
+
+    // Rename buttons clearly
+    if (main_image_button) {
+        main_image_button.name = "choose main image to upload";
+        main_image_button.label = "choose main image to upload";
+    }
+    if (mask_override_button) {
+        mask_override_button.name = "choose mask override to upload";
+        mask_override_button.label = "choose mask override to upload";
+    }
+
+    // Build the new ordered widgets array
+    const ordered = [];
+
+    if (size_preset) ordered.push(size_preset);
+    if (width) ordered.push(width);
+    if (height) ordered.push(height);
+    if (User_prompt) ordered.push(User_prompt);
+
+    if (image) ordered.push(image);
+    if (main_image_preview) ordered.push(main_image_preview);
+    if (main_image_button) ordered.push(main_image_button);
+
+    if (Mask_override_image) ordered.push(Mask_override_image);
+    if (mask_override_preview) ordered.push(mask_override_preview);
+    if (mask_override_button) ordered.push(mask_override_button);
+
+    // Add any remaining uncategorized widgets (just in case)
+    for (const w of remaining) {
+        if (w !== main_image_button && w !== mask_override_button && w !== main_image_preview && w !== mask_override_preview) {
+            ordered.push(w);
+        }
+    }
+
+    // Add dynamic controls
+    ordered.push(...dynamic_controls);
+
+    // Add dynamic widgets
+    ordered.push(...dynamic_widgets);
+
+    // Add fields_config at the very end
+    if (fields_config) ordered.push(fields_config);
+
+    node.widgets = ordered;
+}
+
+
+export function scheduleRestore(node) {
+    if (node.__mAI_MainInputV02_restoreTimer) {
+        clearTimeout(node.__mAI_MainInputV02_restoreTimer);
+    }
+
+    node.__mAI_MainInputV02_restoreTimer = setTimeout(() => {
+        node.__mAI_MainInputV02_restoreTimer = null;
+        restoreFromCurrentNodeState(node);
+    }, 50);
+}
+
+
+export function restoreFromCurrentNodeState(node) {
+    node.__mAI_MainInputV02_restoring = false;
+    hideFieldsConfigWidget(node);
+    rebuildFromConfig(node);
 }

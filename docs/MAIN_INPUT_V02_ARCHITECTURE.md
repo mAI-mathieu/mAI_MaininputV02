@@ -68,20 +68,16 @@ or sessionStorage.
 
 ## Reload Behavior
 
-On node creation and workflow configure, the frontend hides `fields_config` and
-schedules a debounced rebuild. Rebuild reads `fields_config`, removes previous
-dynamic field widgets, recreates the visible field widgets, and normalizes the
-output sockets. Output normalization always emits fixed `width`, `height`,
-`User_prompt`, `Main_image`, and `Main_mask` descriptors first, then appends
-dynamic field descriptors.
+To prevent race conditions during ComfyUI reload, the frontend tracks a node-instance-specific restoration phase:
+1. When `onConfigure` is invoked, it sets `node.__mAI_MainInputV02_restoring = true`.
+2. This flag prevents the size preset, width, and height widget callbacks from triggering and overwriting each other when ComfyUI initializes their values from the saved JSON workflow.
+3. Both `onNodeCreated` and `onConfigure` call `scheduleRestore(node)`, which implements a debounced 50ms timer.
+4. When the timer fires, `restoreFromCurrentNodeState(node)` is executed, which resets `node.__mAI_MainInputV02_restoring = false` and performs a rebuild of the dynamic widgets and outputs.
 
-The rebuild does not remove outputs with `node.removeOutput()` in a broad loop.
-Instead, `normalizeOutputsAfterLoad` builds the expected output list and migrates
-links from the best matching existing outputs. This removes unlinked fallback
-`out_1` to `out_24` sockets while preserving restored links, including links
-from the fixed `width`, `height`, `User_prompt`, `Main_image`, and `Main_mask`
-outputs. If an unexpected extra output still has restored links, it is appended
-instead of discarded.
+By waiting 50ms, the restore pass ensures that ComfyUI has fully loaded all serialized widgets, established links, and set values.
+The rebuild reads `fields_config`, removes previous dynamic field widgets, recreates the visible field widgets, and normalizes the output sockets. Output normalization always emits fixed `width`, `height`, `User_prompt`, `Main_image`, and `Main_mask` descriptors first, then appends dynamic field descriptors.
+
+The rebuild does not remove outputs with `node.removeOutput()` in a broad loop. Instead, `normalizeOutputsAfterLoad` builds the expected output list and migrates links from the best matching existing outputs. This removes unlinked fallback `out_1` to `out_24` sockets while preserving restored links, including links from the fixed `width`, `height`, `User_prompt`, `Main_image`, and `Main_mask` outputs. If an unexpected extra output still has restored links, it is appended instead of discarded.
 
 Output matching priority:
 
