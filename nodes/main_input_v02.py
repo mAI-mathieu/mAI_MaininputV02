@@ -10,8 +10,8 @@ from ..utils.field_config import (
 )
 from ..utils.image_loader import (
     list_input_images,
-    load_image_and_editor_mask,
-    load_mask_override,
+    load_image_and_mask_tensors,
+    load_mask_override_tensor,
 )
 
 
@@ -89,8 +89,8 @@ class mAI_MainInputV02:
                 "width": ("INT", {"default": DEFAULT_WIDTH, "min": 1}),
                 "height": ("INT", {"default": DEFAULT_HEIGHT, "min": 1}),
                 "User_prompt": ("STRING", {"default": "", "multiline": True}),
-                "image": (list_input_images(), {"image_upload": True}),
-                "Mask_override_image": (["none"] + list_input_images(), {"default": "none", "image_upload": True}),
+                "Main_image": (list_input_images(), {"image_upload": True}),
+                "API_mask_override_path": ("STRING", {"default": ""}),
                 "fields_config": (
                     "STRING",
                     {"default": DEFAULT_FIELDS_CONFIG_JSON, "multiline": True},
@@ -98,100 +98,36 @@ class mAI_MainInputV02:
             },
         }
 
-    @classmethod
-    def IS_CHANGED(cls, image, Mask_override_image="none", size_preset=DEFAULT_SIZE_PRESET, width=DEFAULT_WIDTH, height=DEFAULT_HEIGHT, User_prompt="", fields_config=None, **kwargs):
-        import hashlib
-        import folder_paths
-
-        m = hashlib.sha256()
-        
-        # Include state of static widgets and dynamic fields
-        m.update(str(size_preset).encode("utf-8"))
-        m.update(str(width).encode("utf-8"))
-        m.update(str(height).encode("utf-8"))
-        m.update(str(User_prompt).encode("utf-8"))
-        m.update(str(fields_config).encode("utf-8"))
-
-        # Main image file hashing
-        try:
-            if folder_paths.exists_annotated_filepath(image):
-                image_path = folder_paths.get_annotated_filepath(image)
-                with open(image_path, 'rb') as f:
-                    m.update(f.read())
-        except Exception:
-            # Fallback to hashing the filename itself if reading fails
-            m.update(str(image).encode("utf-8"))
-
-        # Mask override image file hashing
-        if Mask_override_image and Mask_override_image != "none":
-            try:
-                if folder_paths.exists_annotated_filepath(Mask_override_image):
-                    mask_path = folder_paths.get_annotated_filepath(Mask_override_image)
-                    with open(mask_path, 'rb') as f:
-                        m.update(f.read())
-            except Exception:
-                m.update(str(Mask_override_image).encode("utf-8"))
-
-        return m.digest().hex()
-
-    @classmethod
-    def VALIDATE_INPUTS(cls, image, Mask_override_image="none", **kwargs):
-        import folder_paths
-
-        def is_absolute_path(filename):
-            if not filename:
-                return False
-            import posixpath
-            import ntpath
-            return (
-                posixpath.isabs(filename)
-                or ntpath.isabs(filename)
-                or filename.startswith("/")
-                or filename.startswith("\\")
-            )
-
-        if is_absolute_path(image):
-            return f"Absolute paths are not allowed for image: {image}"
-
-        if not folder_paths.exists_annotated_filepath(image):
-            return f"Invalid image file: {image}"
-
-        if Mask_override_image and Mask_override_image != "none":
-            if is_absolute_path(Mask_override_image):
-                return f"Absolute paths are not allowed for Mask_override_image: {Mask_override_image}"
-            if not folder_paths.exists_annotated_filepath(Mask_override_image):
-                return f"Invalid mask override image file: {Mask_override_image}"
-
-        return True
-
     def execute(
         self,
         size_preset=DEFAULT_SIZE_PRESET,
         width=DEFAULT_WIDTH,
         height=DEFAULT_HEIGHT,
         User_prompt="",
-        image="",
-        Mask_override_image="none",
+        Main_image="",
+        API_mask_override_path="",
         fields_config=None,
     ):
         width, height = resolve_size(size_preset, width, height)
-        main_image_tensor, editor_mask_tensor, main_image_width, main_image_height = load_image_and_editor_mask(image)
-
-        if Mask_override_image and Mask_override_image != "none":
-            override_mask_tensor = load_mask_override(
-                Mask_override_image,
-                target_width=main_image_width,
-                target_height=main_image_height,
-            )
-            main_mask_tensor = override_mask_tensor
-        else:
-            main_mask_tensor = editor_mask_tensor
-
+        main_image, editor_mask = load_image_and_mask_tensors(Main_image, "Main_image")
+        main_mask = self._main_mask_value(API_mask_override_path, main_image, editor_mask)
         fields = parse_fields_config(fields_config)
-        values = [int(width), int(height), User_prompt, main_image_tensor, main_mask_tensor]
+        values = [int(width), int(height), User_prompt, main_image, main_mask]
         values.extend(self._value_for_field(field) for field in fields)
         values.extend([""] * (MAX_FIELDS + 5 - len(values)))
         return tuple(values)
+
+    @staticmethod
+    def _main_mask_value(API_mask_override_path, main_image, editor_mask):
+        if not API_mask_override_path:
+            return editor_mask
+
+        target_size = (int(main_image.shape[2]), int(main_image.shape[1]))
+        return load_mask_override_tensor(
+            API_mask_override_path,
+            "API_mask_override_path",
+            target_size,
+        )
 
     @staticmethod
     def _value_for_field(field):

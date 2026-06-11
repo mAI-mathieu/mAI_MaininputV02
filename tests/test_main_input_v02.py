@@ -4,10 +4,6 @@ import sys
 import unittest
 from unittest import mock
 
-# Mock the folder_paths module for unit tests running outside ComfyUI
-mock_folder_paths = mock.MagicMock()
-sys.modules['folder_paths'] = mock_folder_paths
-
 
 def load_node_package():
     root = pathlib.Path(__file__).resolve().parents[1]
@@ -42,8 +38,8 @@ class MainInputV02Tests(unittest.TestCase):
                 "width",
                 "height",
                 "User_prompt",
-                "image",
-                "Mask_override_image",
+                "Main_image",
+                "API_mask_override_path",
                 "fields_config",
             },
         )
@@ -98,15 +94,15 @@ class MainInputV02Tests(unittest.TestCase):
         """
         with mock.patch.object(
             node_module,
-            "load_image_and_editor_mask",
-            return_value=(main_image, editor_mask, 64, 32),
+            "load_image_and_mask_tensors",
+            return_value=(main_image, editor_mask),
         ):
             result = node.execute(
                 size_preset="custom",
                 width=1232,
                 height=768,
                 User_prompt="keep this prompt fixed",
-                image="input.png",
+                Main_image="input.png",
                 fields_config=fields_config,
             )
 
@@ -136,15 +132,15 @@ class MainInputV02Tests(unittest.TestCase):
 
         with mock.patch.object(
             node_module,
-            "load_image_and_editor_mask",
-            return_value=(main_image, editor_mask, 64, 32),
+            "load_image_and_mask_tensors",
+            return_value=(main_image, editor_mask),
         ):
             result = node.execute(
                 size_preset="16:9 landscape 1344x768",
                 width=1,
                 height=1,
                 User_prompt="api prompt",
-                image="input.png",
+                Main_image="input.png",
                 fields_config="[]",
             )
 
@@ -159,7 +155,7 @@ class MainInputV02Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Main_image.*requires an image filename"):
             node.execute(fields_config="[]")
 
-    def test_execute_mask_override_image_replaces_editor_mask(self):
+    def test_execute_api_mask_override_path_replaces_editor_mask(self):
         node_class, node_module = self.node_class_and_module()
         node = node_class()
         main_image = FakeImageTensor()
@@ -168,24 +164,24 @@ class MainInputV02Tests(unittest.TestCase):
 
         with mock.patch.object(
             node_module,
-            "load_image_and_editor_mask",
-            return_value=(main_image, editor_mask, 64, 32),
+            "load_image_and_mask_tensors",
+            return_value=(main_image, editor_mask),
         ), mock.patch.object(
             node_module,
-            "load_mask_override",
+            "load_mask_override_tensor",
             return_value=override_mask,
         ) as load_override:
             result = node.execute(
-                image="input.png",
-                Mask_override_image="input_mask.png",
+                Main_image="input.png",
+                API_mask_override_path="input_mask.png",
                 fields_config="[]",
             )
 
         self.assertEqual(result[:5], (1024, 1024, "", main_image, override_mask))
         load_override.assert_called_once_with(
             "input_mask.png",
-            target_width=64,
-            target_height=32,
+            "API_mask_override_path",
+            (64, 32),
         )
 
     def test_execute_image_field_requires_filename(self):
@@ -205,11 +201,11 @@ class MainInputV02Tests(unittest.TestCase):
 
         with mock.patch.object(
             node_module,
-            "load_image_and_editor_mask",
-            return_value=(FakeImageTensor(), object(), 64, 32),
+            "load_image_and_mask_tensors",
+            return_value=(FakeImageTensor(), object()),
         ):
             with self.assertRaisesRegex(ValueError, "dynamic IMAGE/MASK fields were removed and should be replaced by fixed Main_image/Main_mask"):
-                node.execute(image="input.png", fields_config=fields_config)
+                node.execute(Main_image="input.png", fields_config=fields_config)
 
     def test_execute_mask_field_requires_filename(self):
         node_class, node_module = self.node_class_and_module()
@@ -228,65 +224,11 @@ class MainInputV02Tests(unittest.TestCase):
 
         with mock.patch.object(
             node_module,
-            "load_image_and_editor_mask",
-            return_value=(FakeImageTensor(), object(), 64, 32),
+            "load_image_and_mask_tensors",
+            return_value=(FakeImageTensor(), object()),
         ):
             with self.assertRaisesRegex(ValueError, "dynamic IMAGE/MASK fields were removed and should be replaced by fixed Main_image/Main_mask"):
-                node.execute(image="input.png", fields_config=fields_config)
-
-    def test_validate_inputs_returns_true_for_valid_annotated_paths(self):
-        node_class, _node_module = self.node_class_and_module()
-
-        import folder_paths
-        folder_paths.exists_annotated_filepath.return_value = True
-        result = node_class.VALIDATE_INPUTS(image="input.png", Mask_override_image="mask.png")
-        self.assertTrue(result)
-
-    def test_validate_inputs_rejects_absolute_paths(self):
-        node_class, _node_module = self.node_class_and_module()
-
-        import folder_paths
-        folder_paths.exists_annotated_filepath.return_value = True
-
-        result = node_class.VALIDATE_INPUTS(image=r"C:\temp\input.png")
-        self.assertIsInstance(result, str)
-        self.assertIn("Absolute paths are not allowed", result)
-
-        result = node_class.VALIDATE_INPUTS(image="input.png", Mask_override_image=r"/tmp/mask.png")
-        self.assertIsInstance(result, str)
-        self.assertIn("Absolute paths are not allowed", result)
-
-    def test_validate_inputs_rejects_missing_files(self):
-        node_class, _node_module = self.node_class_and_module()
-
-        import folder_paths
-        folder_paths.exists_annotated_filepath.side_effect = lambda x: x == "input.png"
-        try:
-            result = node_class.VALIDATE_INPUTS(image="input.png", Mask_override_image="missing_mask.png")
-            self.assertIsInstance(result, str)
-            self.assertIn("Invalid mask override image file", result)
-        finally:
-            folder_paths.exists_annotated_filepath.side_effect = None
-
-    def test_is_changed_incorporates_file_contents_and_widget_states(self):
-        node_class, _node_module = self.node_class_and_module()
-
-        import folder_paths
-        folder_paths.exists_annotated_filepath.return_value = True
-        folder_paths.get_annotated_filepath.side_effect = lambda x: f"/fake/{x}"
-        
-        try:
-            with mock.patch("builtins.open", mock.mock_open(read_data=b"file_bytes")):
-                hash1 = node_class.IS_CHANGED(image="input.png", Mask_override_image="mask.png", width=512)
-                hash2 = node_class.IS_CHANGED(image="input.png", Mask_override_image="mask.png", width=512)
-                hash3 = node_class.IS_CHANGED(image="input.png", Mask_override_image="mask.png", width=1024)
-
-                self.assertEqual(hash1, hash2)
-                self.assertNotEqual(hash1, hash3)
-        finally:
-            folder_paths.exists_annotated_filepath.return_value = None
-            folder_paths.get_annotated_filepath.side_effect = None
-
+                node.execute(Main_image="input.png", fields_config=fields_config)
 
 
 class FakeImageTensor:

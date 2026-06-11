@@ -10,8 +10,8 @@ The node also has fixed size state:
 - `width`: serialized `INT` widget and fixed `INT` output
 - `height`: serialized `INT` widget and fixed `INT` output
 - `User_prompt`: serialized multiline `STRING` widget and fixed `STRING` output
-- `image` (labeled as `Main_image`): serialized image upload/select widget (internally named `"image"` for mask editor compatibility) and fixed `Main_image` output
-- `Mask_override_image`: serialized image upload/select widget for overriding the main image mask
+- `Main_image`: serialized image upload/select widget and fixed `IMAGE` output
+- `API_mask_override_path`: serialized text widget for API mask override
 
 Fixed outputs always appear first in this order:
 
@@ -29,15 +29,16 @@ The hidden `fields_config` widget is the source of truth for workflow save/load
 and API export. Dynamic field widgets are marked with `serialize = false`, so
 they do not become independent serialized state.
 
-`size_preset`, `width`, `height`, `User_prompt`, `image` (the internal name of the main image widget), and
-`Mask_override_image` are ordinary serialized widgets. API workflows can set
+`size_preset`, `width`, `height`, `User_prompt`, `Main_image`, and
+`API_mask_override_path` are ordinary serialized widgets. API workflows can set
 them directly. When `size_preset` is `custom`, the supplied `width` and `height`
 values are used. Non-custom presets resolve to their mapped dimensions in the
 backend.
 
-`User_prompt`, `Main_image`, and `Mask_override_image` are not stored in
-`fields_config`. `Mask_override_image` is a regular image select/upload widget
-that allows overriding the main image mask (e.g. by uploading a transparent PNG).
+`User_prompt`, `Main_image`, and `API_mask_override_path` are not stored in
+`fields_config`. `API_mask_override_path` is intentionally named as an API-only
+override path so it is not confused with the fixed `Main_mask` output or the
+normal mask editor data associated with `Main_image`.
 
 Each field stores:
 
@@ -105,25 +106,36 @@ the fixed outputs plus dynamic outputs defined by `fields_config`.
 
 ## Image Status
 
-The main image input widget is internally named `"image"` rather than `"Main_image"` because ComfyUI's core frontend mask editor (including `useMaskEditorLoader` and `updateNodeWithServerReferences` in the React frontend) has hardcoded lookups targeting widgets named exactly `"image"`. Utilizing `"image"` as the internal widget name ensures painted masks are correctly uploaded to ComfyUI's temp clipspace and persist/restore perfectly upon browser refreshes.
+The fixed `Main_image` widget stores a ComfyUI input filename and uses
+ComfyUI's `image_upload` widget metadata so the frontend behaves like a regular
+image upload/select widget where possible. API workflows set `Main_image` as a
+filename string. Backend loading mirrors ComfyUI `LoadImage`: the node resolves
+the filename with `folder_paths.get_annotated_filepath`, loads the image tensor,
+and reads mask data from the selected image's alpha channel.
 
-The UI displays the corresponding output socket as `"Main_image"`. In API workflows, callers must use `"image"` as the input key. 
-
-The fixed `image` widget stores a ComfyUI input filename and uses ComfyUI's `image_upload` widget metadata so the frontend behaves like a regular image upload/select widget. Backend loading mirrors ComfyUI `LoadImage`: the node resolves the filename with `folder_paths.get_annotated_filepath`, loads the image tensor, and reads mask data from the selected image's alpha channel (which contains the painted mask).
-
-The fixed `Mask_override_image` widget stores an optional filename string (or `"none"`). It is not an output, not a dynamic field, and not part of `fields_config`.
+The fixed `API_mask_override_path` widget stores an optional filename string. It
+is not an output, not a dynamic field, and not part of `fields_config`.
 
 The fixed `Main_mask` output uses this priority:
 
-1. If `Mask_override_image` is selected (and not `"none"`), load that file and extract the mask from it.
-2. If `Mask_override_image` is `"none"` (or empty), use the regular ComfyUI `LoadImage` mask associated with the main `image` (including alpha/mask data saved by ComfyUI's mask editor).
-3. If no mask exists, return an empty mask matching the main `image` dimensions.
+1. If `API_mask_override_path` is filled, load that file and output it as
+   `Main_mask`.
+2. If `API_mask_override_path` is empty, use the regular ComfyUI `LoadImage`
+   mask associated with `Main_image`, including alpha data saved by ComfyUI's
+   mask editor.
+3. If no mask exists, return an empty mask matching `Main_image` dimensions.
 
-ComfyUI's `/upload/mask` route saves a painted mask into the alpha channel of the referenced image. `Main_mask` follows the same convention as `LoadImage` by outputting inverted alpha (`1 - alpha`) when alpha is present. Only when no alpha/mask data exists does the node create an empty mask.
+ComfyUI's `/upload/mask` route saves a painted mask into the alpha channel of
+the referenced image. `Main_mask` follows the same convention as `LoadImage` by
+outputting inverted alpha (`1 - alpha`) when alpha is present. Only when no
+alpha/mask data exists does the node create an empty mask.
 
-When `Mask_override_image` points to a normal image file, the backend converts it to luminance. When it points to an image with alpha, the backend uses alpha in the same inverted convention as ComfyUI Load Image. If the override mask size differs from the main `image`, it is resized to the main `image` dimensions.
+When `API_mask_override_path` points to a normal image file, the backend converts
+it to luminance. When it points to an image with alpha, the backend uses alpha in
+the same inverted convention as ComfyUI Load Image. If the override mask size
+differs from `Main_image`, it is resized to `Main_image` dimensions.
 
-`Mask_override_image` must be a ComfyUI input filename such as `mask.png` or
+`API_mask_override_path` must be a ComfyUI input filename such as `mask.png` or
 `masks/mask.png`. Absolute local paths are rejected by default because accepting
 arbitrary filesystem paths from workflow/API JSON would let a workflow read
 local files outside ComfyUI's managed input directory. API callers should upload
@@ -132,21 +144,3 @@ or copy mask files into `ComfyUI/input` first, then pass the resulting filename.
 Dynamic `IMAGE` and `MASK` fields are not supported. Only scalar field types (`STRING`, `DROPDOWN`, `INT`, `FLOAT`, and `BOOLEAN`) are supported.
 
 If an old workflow or API export contains a dynamic `IMAGE` or `MASK` field in `fields_config`, backend validation will raise a descriptive `ValueError` explaining that dynamic `IMAGE`/`MASK` fields were removed and should be replaced by fixed `Main_image`/`Main_mask` outputs.
-
-## Input Validation and Change Tracking
-
-### VALIDATE_INPUTS
-Since the node uses a custom dropdown list (choices populated from `list_input_images()`), ComfyUI automatically performs strict list-membership validation on incoming image choices. However, when using the built-in ComfyUI mask editor, the frontend updates the image widget's value to a temporary clipspace path (e.g., `clipspace/clipspace-painted-masked-xxx.png [temp]`), which is not in the initial dropdown list. This would trigger a "Value not in list" execution error.
-
-To solve this, the node implements a custom `@classmethod VALIDATE_INPUTS` that:
-1. Bypasses ComfyUI's default list-membership check on the server.
-2. Accepts both regular input filenames and clipspace filenames created by the mask editor.
-3. Checks if the file exists using `folder_paths.exists_annotated_filepath`.
-4. Rejects arbitrary absolute local paths across all platforms (Windows/Unix) for safety to prevent reading files outside ComfyUI's managed paths.
-
-### IS_CHANGED
-The node implements a custom `@classmethod IS_CHANGED` to ensure ComfyUI correctly detects updates and refreshes outputs. It hashes:
-1. The state of all static widgets (`size_preset`, `width`, `height`, `User_prompt`).
-2. The dynamic fields JSON configuration (`fields_config`).
-3. The content of the main `image` file and `Mask_override_image` file by resolving their annotated paths and reading the binary data. If file reading fails, it falls back to hashing the filenames.
-

@@ -71,24 +71,6 @@ Do not let implementation and documentation drift apart.
 
 If no architecture documentation update is needed, mention why in the final response.
 
-## Local environment
-
-ComfyUI runs inside a Python virtual environment.
-
-- Do not assume system Python has ComfyUI dependencies.
-- When running Python commands, use the repository or ComfyUI `.venv` Python.
-- On Windows, prefer:
-  - `.venv\Scripts\python.exe`
-  - `.venv\Scripts\pip.exe`
-- On Linux/macOS, prefer:
-  - `.venv/bin/python`
-  - `.venv/bin/pip`
-- Do not install packages globally.
-- Do not add or pin torch unless explicitly requested.
-- If `.venv` is not available from this repository, ask before running dependency-based commands.
-- For simple static checks, prefer reading files instead of launching ComfyUI.
-- Do not launch long-running ComfyUI server processes unless explicitly requested.
-
 ## Testing
 
 - Add small pure Python tests for logic when possible.

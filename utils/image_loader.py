@@ -34,132 +34,33 @@ def list_input_images():
     return sorted(filenames)
 
 
-def load_image_tensor(filename, field_name=None):
-    images, _masks, _w, _h = load_image_and_editor_mask(filename)
+def load_image_tensor(filename, field_name):
+    images, _masks = load_image_and_mask_tensors(filename, field_name)
     return images
 
 
-def load_mask_tensor(filename, field_name=None):
-    _images, masks, _w, _h = load_image_and_editor_mask(filename)
+def load_mask_tensor(filename, field_name):
+    _images, masks = load_image_and_mask_tensors(filename, field_name)
     return masks
 
 
-def load_image_and_mask_tensors(filename, field_name=None):
-    img, mask, _w, _h = load_image_and_editor_mask(filename)
-    return img, mask
+def load_image_and_mask_tensors(filename, field_name):
+    return _load_image_and_masks(
+        filename,
+        field_name,
+        mask_mode="alpha_or_empty",
+        use_comfy_loader=True,
+    )
 
 
-def load_mask_override_tensor(filename, field_name=None, target_size=None):
-    target_width = target_size[0] if target_size else None
-    target_height = target_size[1] if target_size else None
-    return load_mask_override(filename, target_width, target_height)
-
-
-def load_image_and_editor_mask(filename):
-    if not filename:
-        raise ValueError("Main_image requires an image filename.")
-
-    # Try to use official ComfyUI LoadImage node to load the image/mask
-    try:
-        import nodes
-        load_image_node = nodes.LoadImage()
-        image_tensor, mask_tensor = load_image_node.load_image(filename)
-        
-        batch, height, width, _channels = image_tensor.shape
-        # Check if the returned mask is the 64x64 empty placeholder
-        # and if the image has different dimensions, return a proper size empty mask.
-        if mask_tensor.shape[1] == 64 and mask_tensor.shape[2] == 64 and (height != 64 or width != 64):
-            import torch
-            mask_tensor = torch.zeros((batch, height, width), dtype=image_tensor.dtype, device=image_tensor.device)
-            
-        return image_tensor, mask_tensor, width, height
-    except Exception:
-        # Fallback to our own Pillow-based loader mirroring official LoadImage
-        return _fallback_load_image_and_editor_mask(filename)
-
-
-def _fallback_load_image_and_editor_mask(filename):
-    folder_paths, image_module, image_ops, image_sequence, np, torch = _load_dependencies()
-    image_path = _resolve_image_path(folder_paths, filename, "image")
-    dtype, device = _runtime_tensor_settings(torch)
-
-    images = []
-    masks = []
-    with _pillow_open(image_module, image_path) as image:
-        first_size = None
-        for frame in image_sequence.Iterator(image):
-            frame = _pillow_call(image_ops.exif_transpose, frame)
-
-            rgb_image = frame.convert("RGB")
-            if first_size is None:
-                first_size = rgb_image.size
-            elif rgb_image.size != first_size:
-                continue
-
-            image_array = np.array(rgb_image).astype(np.float32) / 255.0
-            images.append(torch.from_numpy(image_array)[None,].to(dtype=dtype, device=device))
-
-            # Get editor mask (alpha) or empty mask matching image size
-            if "A" in frame.getbands():
-                mask_image = frame.getchannel("A")
-                mask_array = 1.0 - np.array(mask_image).astype(np.float32) / 255.0
-            elif frame.mode == "P" and "transparency" in frame.info:
-                mask_image = frame.convert("RGBA").getchannel("A")
-                mask_array = 1.0 - np.array(mask_image).astype(np.float32) / 255.0
-            else:
-                mask_array = np.zeros((rgb_image.size[1], rgb_image.size[0]), dtype=np.float32)
-
-            masks.append(torch.from_numpy(mask_array)[None,].to(dtype=dtype, device=device))
-
-    if not images:
-        raise ValueError(f"Main_image '{filename}' did not contain any frames.")
-
-    image_tensor = torch.cat(images, dim=0)
-    mask_tensor = _stack_masks(torch, masks)
-    width, height = first_size
-
-    return image_tensor, mask_tensor, width, height
-
-
-def load_mask_override(filename, target_width, target_height):
-    if not filename or filename == "none":
-        raise ValueError("Mask_override_image requires a valid filename.")
-
-    folder_paths, image_module, image_ops, image_sequence, np, torch = _load_dependencies()
-    image_path = _resolve_image_path(folder_paths, filename, "Mask_override_image")
-    dtype, device = _runtime_tensor_settings(torch)
-
-    masks = []
-    with _pillow_open(image_module, image_path) as image:
-        for frame in image_sequence.Iterator(image):
-            frame = _pillow_call(image_ops.exif_transpose, frame)
-            
-            # Check if alpha exists
-            if "A" in frame.getbands():
-                mask_image = frame.getchannel("A")
-                invert = True
-            elif frame.mode == "P" and "transparency" in frame.info:
-                mask_image = frame.convert("RGBA").getchannel("A")
-                invert = True
-            else:
-                # Use luminance
-                mask_image = frame.convert("L")
-                invert = False
-
-            # Resize to target size if dimensions differ
-            if (target_width and target_height) and mask_image.size != (target_width, target_height):
-                mask_image = mask_image.resize((target_width, target_height), _resampling_lanczos(image_module))
-
-            mask_array = np.array(mask_image).astype(np.float32) / 255.0
-            if invert:
-                mask_array = 1.0 - mask_array
-
-            masks.append(torch.from_numpy(mask_array)[None,].to(dtype=dtype, device=device))
-
-    if not masks:
-        raise ValueError(f"Mask_override_image '{filename}' did not contain any frames.")
-
-    return _stack_masks(torch, masks)
+def load_mask_override_tensor(filename, field_name, target_size):
+    _images, masks = _load_image_and_masks(
+        filename,
+        field_name,
+        mask_mode="alpha_or_luminance",
+        target_size=target_size,
+    )
+    return masks
 
 
 def _load_image_and_masks(
@@ -291,9 +192,9 @@ def _is_supported_image_file(input_dir, filename):
 
 def _resolve_image_path(folder_paths, filename, field_name):
     if _is_absolute_path(filename):
-        if field_name == "Mask_override_image":
+        if field_name == "API_mask_override_path":
             raise ValueError(
-                "Mask_override_image must be a ComfyUI input filename, "
+                "API_mask_override_path must be a ComfyUI input filename, "
                 "not an absolute local path.\n"
                 "Put the mask image in ComfyUI/input or upload it through "
                 "the ComfyUI API first, then use the uploaded filename.\n"
@@ -322,15 +223,10 @@ def _resolve_image_path(folder_paths, filename, field_name):
 
 
 def _is_absolute_path(filename):
-    if not filename:
-        return False
-    import posixpath
-    import ntpath
-    return (
-        posixpath.isabs(filename)
-        or ntpath.isabs(filename)
-        or filename.startswith("/")
-        or filename.startswith("\\")
+    return os.path.isabs(filename) or (
+        len(filename) >= 3
+        and filename[1] == ":"
+        and filename[2] in ("\\", "/")
     )
 
 
