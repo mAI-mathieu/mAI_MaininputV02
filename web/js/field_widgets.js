@@ -2,6 +2,7 @@ import { api } from "../../../../scripts/api.js";
 import { app } from "../../../../scripts/app.js";
 import { CONFIG_WIDGET, DEFAULT_SIZE_PRESET, DEFAULT_WIDTH, DEFAULT_HEIGHT, MAX_FIELDS, SIZE_PRESETS } from "./constants.js";
 import {
+    capitalizeFirstLetter,
     normalizeBoolean,
     normalizeName,
     normalizeOptions,
@@ -112,9 +113,7 @@ export function ensureControls(node) {
                 contentHeight += (f.type === "STRING") ? 60 : 34;
             }
             
-            // Add details block height
-            const detailsOpen = node.__mAI_api_details_open || false;
-            contentHeight += detailsOpen ? 242 : 26; // 242 open, 26 closed
+
             
             const containerHeight = Math.min(800, contentHeight);
 
@@ -266,33 +265,6 @@ function applySizePreset(sizePresetWidget, widthWidget, heightWidget, presetName
 }
 
 
-function generateApiSchema(node) {
-    const findWidgetVal = (name) => {
-        const w = node.widgets?.find(w => w.name === name);
-        return w ? w.value : null;
-    };
-    const rawFields = findWidgetVal("fields_config") ?? "[]";
-    let parsedFields = [];
-    try { parsedFields = JSON.parse(rawFields); } catch(e) {}
-    
-    const apiFormat = {};
-    apiFormat[String(node.id)] = {
-        inputs: {
-            size_preset: findWidgetVal("size_preset") ?? "custom",
-            width: findWidgetVal("width") ?? 1024,
-            height: findWidgetVal("height") ?? 1024,
-            User_prompt: findWidgetVal("User_prompt") ?? "",
-            fields_config: parsedFields
-        },
-        class_type: node.comfyClass || "mAI_MainInputV02",
-        _meta: {
-            title: node.title || "mAI MainInputV02",
-            api_note: "IMPORTANT: The 'fields_config' array must be serialized back into a JSON string using JSON.stringify() before sending this payload to ComfyUI!"
-        }
-    };
-    return JSON.stringify(apiFormat, null, 2);
-}
-
 
 export function renderDOMFields(node) {
     if (!node.__mAI_MainInputV02_listDiv) return;
@@ -401,59 +373,7 @@ export function renderDOMFields(node) {
     const idLabel = document.createElement("span");
     idLabel.textContent = `Node ID: ${node.id}`;
     
-    const copyBtn = document.createElement("button");
-    copyBtn.textContent = "📋 Copy Schema";
-    copyBtn.onclick = () => {
-        const schemaStr = generateApiSchema(node);
-        
-        navigator.clipboard.writeText(schemaStr).then(() => {
-            copyBtn.textContent = "✅ Copied API Node!";
-            copyBtn.style.color = "#80c77d";
-            setTimeout(() => {
-                copyBtn.textContent = "📋 Copy Schema";
-                copyBtn.style.color = "";
-            }, 2000);
-        });
-    };
-    
-    const existingDetails = container.querySelector(".mai-api-details");
-    if (existingDetails) existingDetails.remove();
-
-    const detailsEl = document.createElement("details");
-    detailsEl.className = "mai-api-details";
-    // Preserve open state if it was already open before render
-    if (node.__mAI_api_details_open) detailsEl.open = true;
-
-    const summaryEl = document.createElement("summary");
-    summaryEl.textContent = "👁 View Live API Schema";
-    
-    const preEl = document.createElement("pre");
-    preEl.textContent = generateApiSchema(node);
-    
-    detailsEl.appendChild(summaryEl);
-    detailsEl.appendChild(preEl);
-    
-    detailsEl.addEventListener("toggle", () => {
-        if (node.__mAI_api_details_open === detailsEl.open) return;
-        node.__mAI_api_details_open = detailsEl.open;
-        
-        const EXPANDED_DELTA = 216;
-        if (detailsEl.open) {
-            node.size[1] += EXPANDED_DELTA;
-        } else {
-            node.size[1] -= EXPANDED_DELTA;
-        }
-        
-        if (node.__mAI_MainInputV02_domWidget) {
-            node.__mAI_MainInputV02_domWidget.computeSize(node.size[0]);
-        }
-        app.canvas.setDirty(true, true);
-    });
-    
-    container.appendChild(detailsEl);
-    
     apiFooter.appendChild(idLabel);
-    apiFooter.appendChild(copyBtn);
     container.appendChild(apiFooter);
 
     requestAnimationFrame(() => {
@@ -479,11 +399,11 @@ export function addField(node, type) {
 
 
 export function createDefaultField(type, fields) {
-    const lowerType = type.toLowerCase();
-    const index = nextFieldNameIndex(fields, lowerType);
+    const typeCapitalized = capitalizeFirstLetter(type.toLowerCase());
+    const index = nextFieldNameIndex(fields, typeCapitalized);
     const field = {
         id: nextFieldId(fields),
-        name: `${lowerType}_${index}`,
+        name: `${typeCapitalized}_${index}`,
         type,
         value: "",
     };

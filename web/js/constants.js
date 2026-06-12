@@ -31,8 +31,8 @@ export const OUTPUT_TYPE_BY_FIELD_TYPE = {
 };
 
 export const FIXED_OUTPUT_DESCRIPTORS = [
-    { fieldId: "__fixed_width", name: "width", type: "INT", fixed: true },
-    { fieldId: "__fixed_height", name: "height", type: "INT", fixed: true },
+    { fieldId: "__fixed_width", name: "Width", type: "INT", fixed: true },
+    { fieldId: "__fixed_height", name: "Height", type: "INT", fixed: true },
     { fieldId: "__fixed_User_prompt", name: "User_prompt", type: "STRING", fixed: true },
     { fieldId: "__fixed_Aspect_ratio", name: "Aspect_ratio", type: "STRING", fixed: true },
 ];

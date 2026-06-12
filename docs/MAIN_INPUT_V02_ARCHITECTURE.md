@@ -17,10 +17,12 @@ The node also has fixed size state:
 
 Fixed outputs always appear first in this order:
 
-1. `width`
-2. `height`
+1. `Width`
+2. `Height`
 3. `User_prompt`
 4. `Aspect_ratio` (Mathematically calculated from width/height to snap to standard ratios like "16:9" or output custom integer ratios)
+
+All outputs (fixed and dynamic) strictly enforce a standardized format: capitalized first letter with no spaces (spaces are replaced with underscores). Dynamic field names typed by the user are automatically sanitized.
 
 Do not move fields_config.
 Use fields_config only as hidden serialized data for dynamic scalar fields.
@@ -34,7 +36,9 @@ and API export. It must remain present in `node.widgets` and serializable even
 while hidden. Frontend layout code must treat it as protected state: it must
 not be moved, removed, or used as a layout spacer. Dynamic fields and add-field
 controls are rendered inside a single HTML `DOMWidget` appended after the fixed
-widgets, so they do not become independent serialized state.
+widgets, so they do not become independent serialized state. Note: The live API 
+schema preview and copy functions have been removed from the UI to save space, 
+but API export behavior still relies entirely on `fields_config`.
 
 `size_preset`, `width`, `height`, and `User_prompt` are ordinary serialized
 widgets. API workflows can set them directly. When `size_preset` is `custom`,
@@ -81,11 +85,11 @@ To prevent race conditions during ComfyUI reload, the frontend tracks a node-ins
 4. When the timer fires, `restoreFromCurrentNodeState(node)` is executed, which resets `node.__mAI_MainInputV02_restoring = false` and performs a rebuild of the dynamic widgets and outputs.
 
 By waiting 50ms, the restore pass ensures that ComfyUI has fully loaded all serialized widgets, established links, and set values.
-The rebuild reads `fields_config`, normalizes the output sockets, and calls `renderDOMFields(node)` to recreate the HTML field list. Output normalization always emits fixed `width`, `height`, `User_prompt`, and `Aspect_ratio` descriptors first, then appends dynamic field descriptors.
+The rebuild reads `fields_config`, normalizes the output sockets, and calls `renderDOMFields(node)` to recreate the HTML field list. Output normalization always emits fixed `Width`, `Height`, `User_prompt`, and `Aspect_ratio` descriptors first, then appends dynamic field descriptors.
 If the fixed backend widgets are not present yet, the frontend does not add the
 DOMWidget or rebuild HTML fields during that pass.
 
-The rebuild does not remove outputs with `node.removeOutput()` in a broad loop. Instead, `normalizeOutputsAfterLoad` builds the expected output list and migrates links from the best matching existing outputs. This removes unlinked fallback `out_1` to `out_24` sockets while preserving restored links, including links from the fixed `width`, `height`, and `User_prompt` outputs. If an unexpected extra output still has restored links, it is appended instead of discarded.
+The rebuild does not remove outputs with `node.removeOutput()` in a broad loop. Instead, `normalizeOutputsAfterLoad` builds the expected output list and migrates links from the best matching existing outputs. This removes unlinked fallback `out_1` to `out_24` sockets while preserving restored links, including links from the fixed `Width`, `Height`, and `User_prompt` outputs. If an unexpected extra output still has restored links, it is appended instead of discarded.
 
 Output matching priority:
 
@@ -103,10 +107,10 @@ Adding a field appends one matching output socket after the fixed outputs.
 Renaming a field updates the existing dynamic output name in place. Removing a
 field intentionally removes only that field's widgets and output socket.
 
-Renaming or removing dynamic fields must not affect the fixed `width`, `height`,
+Renaming or removing dynamic fields must not affect the fixed `Width`, `Height`,
 or `User_prompt` outputs.
 
-The Python backend exposes fixed outputs for `width`, `height`, `User_prompt`, and
+The Python backend exposes fixed outputs for `Width`, `Height`, `User_prompt`, and
 `Aspect_ratio`, followed by 24 wildcard fallback outputs for ComfyUI compatibility.
 The frontend displays only the fixed outputs plus dynamic outputs defined by `fields_config`.
 

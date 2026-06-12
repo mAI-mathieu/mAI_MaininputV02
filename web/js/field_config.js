@@ -1,6 +1,19 @@
 import { FIELD_TYPES, MAX_FIELDS, OUTPUT_TYPE_BY_FIELD_TYPE } from "./constants.js";
 
 
+export function capitalizeFirstLetter(str) {
+    if (!str) return str;
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+export function sanitizeFieldName(str) {
+    if (!str) return "";
+    const sanitized = String(str).trim().replace(/\s+/g, '_');
+    if (!sanitized) return "";
+    return sanitized.charAt(0).toUpperCase() + sanitized.slice(1);
+}
+
+
 export function parseFieldsConfig(text) {
     let parsed;
     try {
@@ -47,7 +60,7 @@ export function validateField(item, index) {
 
     const field = {
         id: item.id.trim(),
-        name: item.name.trim(),
+        name: sanitizeFieldName(item.name),
         type,
     };
 
@@ -113,8 +126,8 @@ export function normalizeBoolean(value) {
 
 
 export function normalizeName(value, fallback) {
-    const nextName = normalizeString(value).trim();
-    return nextName || fallback || "field";
+    const nextName = sanitizeFieldName(value);
+    return nextName || sanitizeFieldName(fallback) || "Field";
 }
 
 

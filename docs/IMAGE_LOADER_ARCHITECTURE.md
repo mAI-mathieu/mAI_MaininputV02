@@ -17,8 +17,8 @@ The `mAI_ImageLoader` is a specialized, extracted version of the image input fun
 The frontend uses a Hybrid UI Architecture combining native LiteGraph/ComfyUI components and a custom `DOMWidget`.
 
 - **Mask Override Upload**: ComfyUI's standard `image` widget combo boxes do not natively allow uploading directly into a *second* widget if they're named differently or behaving peculiarly. We inject an explicit `📁 Upload Mask Override` button that silently uses an HTML `<input type="file">` to post the mask to the `/upload/image` API endpoint, appending the resulting filename to the combo box options and selecting it.
-- **Mathematical Resizing**: The node incorporates a custom DOMWidget containing the "API Schema" accordion and the Node ID footer. Because we must ensure the ComfyUI native image preview (which renders *below* all widgets) does not get overlapped by HTML DOM elements, the node calculates its `size[1]` explicitly.
-  - It intercepts `onResize` and `computeSize` to force the `container.style.height` and `node.size[1]` to accommodate the exact height of the API accordion (whether open or closed).
+- **Mathematical Resizing**: The node incorporates a custom DOMWidget containing the "Upload Mask Override" button and the Node ID footer. Because we must ensure the ComfyUI native image preview (which renders *below* all widgets) does not get overlapped by HTML DOM elements, the node calculates its `size[1]` explicitly.
+  - It intercepts `onResize` and `computeSize` to force the `container.style.height` and `node.size[1]` to accommodate the exact height of the DOM elements.
 
 ## Migration Notes
 This node was built using an "Additive First" refactor pattern. It extracts logic from `mAI_MainInputV02` without deleting it from the original node, allowing both to co-exist for backward compatibility in the short-term until users migrate their workflows to the new standalone `mAI_ImageLoader`.

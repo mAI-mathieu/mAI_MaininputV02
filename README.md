@@ -32,7 +32,7 @@ No install script or heavy dependencies are required.
 ## How It Works
 
 The node has no connectable input sockets on the left side. It always exposes
-fixed `width`, `height`, `User_prompt`, `Main_image`, and `Main_mask` outputs
+fixed `Width`, `Height`, `User_prompt`, `Main_image`, and `Main_mask` outputs
 first, then dynamic output sockets on the right side.
 
 Use `size_preset` to set common dimensions. Selecting a non-custom preset
@@ -72,7 +72,7 @@ Use the node buttons to add dynamic scalar fields:
 Each added field creates visible controls for the value, a matching output
 socket, and an internal serialized field definition in `fields_config`.
 
-Dynamic outputs always appear after the fixed `width`, `height`, `User_prompt`,
+Dynamic outputs always appear after the fixed `Width`, `Height`, `User_prompt`,
 `Main_image`, and `Main_mask` outputs.
 
 ## Supported Dynamic Field Types
@@ -101,16 +101,16 @@ The fixed `Main_mask` output is produced with this priority:
 ## API Export Note
 
 ComfyUI requires static class-level return definitions, so the Python backend
-declares fixed `INT` outputs for `width` and `height`, fixed `STRING`,
+declares fixed `INT` outputs for `Width` and `Height`, fixed `STRING`,
 `IMAGE`, and `MASK` outputs for `User_prompt`, `Main_image`, and `Main_mask`,
 followed by 24 wildcard fallback outputs:
 
 ```text
-width, height, User_prompt, Main_image, Main_mask, out_1 ... out_24
+Width, Height, User_prompt, Main_image, Main_mask, out_1 ... out_24
 ```
 
 The frontend replaces the visible outputs with the field names and types stored
-in `fields_config`, while keeping `width`, `height`, `User_prompt`,
+in `fields_config`, while keeping `Width`, `Height`, `User_prompt`,
 `Main_image`, and `Main_mask` fixed at the front. API exports should include
 `size_preset`, `width`, `height`, `User_prompt`, `image`,
 `Mask_override_image`, and `fields_config`. If `size_preset` is `custom`,
@@ -160,7 +160,7 @@ Users should not need to edit this JSON directly.
 ## Known Limitations
 
 - Maximum of 24 fields.
-- `width`, `height`, `User_prompt`, `Main_image`, and `Main_mask` are fixed
+- `Width`, `Height`, `User_prompt`, `Main_image`, and `Main_mask` are fixed
   outputs and cannot be removed or renamed.
 - Removing a field removes its matching output socket and can remove links from
   that socket.
@@ -189,7 +189,7 @@ Common causes:
 3. Confirm `size_preset`, `width`, `height`, `User_prompt`, `Main_image`,
    and `Mask_override_image` are visible.
 4. Confirm no left-side input sockets.
-5. Confirm the fixed outputs are `width`, `height`, `User_prompt`,
+5. Confirm the fixed outputs are `Width`, `Height`, `User_prompt`,
    `Main_image`, and `Main_mask`.
 6. Select `1:1 square 1024x1024` and confirm width/height become `1024`.
 7. Select `16:9 landscape 1344x768` and confirm width becomes `1344` and

@@ -79,8 +79,8 @@ class mAI_MainInputV02:
         "*",
     )
     RETURN_NAMES = (
-        "width",
-        "height",
+        "Width",
+        "Height",
         "User_prompt",
         "Aspect_ratio",
 

@@ -14,25 +14,6 @@ function addStylesheet() {
     document.head.appendChild(style);
 }
 
-function generateImageLoaderSchema(node) {
-    const findWidgetVal = (name) => {
-        const w = node.widgets?.find(w => w.name === name);
-        return w ? w.value : null;
-    };
-    
-    const apiFormat = {};
-    apiFormat[String(node.id)] = {
-        inputs: {
-            image: findWidgetVal("image") ?? "none",
-            Mask_override_image: findWidgetVal("Mask_override_image") ?? "none",
-        },
-        class_type: node.comfyClass || "mAI_ImageLoader",
-        _meta: {
-            title: node.title || "mAI ImageLoader"
-        }
-    };
-    return JSON.stringify(apiFormat, null, 2);
-}
 
 export function updateNodeUI(node) {
     if (!node.__mAI_ImageLoader_domWidget) return;
@@ -44,10 +25,7 @@ export function updateNodeUI(node) {
         idLabel.textContent = `Node ID: ${node.id}`;
     }
 
-    const schemaPre = container.querySelector(".mai-api-details pre");
-    if (schemaPre) {
-        schemaPre.textContent = generateImageLoaderSchema(node);
-    }
+
 }
 
 export function resizeNode(node) {
@@ -150,71 +128,14 @@ export function ensureControls(node) {
         const idLabel = document.createElement("span");
         idLabel.textContent = `Node ID: ${node.id}`;
         
-        const copyBtn = document.createElement("button");
-        copyBtn.textContent = "📋 Copy Schema";
-        copyBtn.onclick = () => {
-            updateNodeUI(node);
-            const schemaStr = generateImageLoaderSchema(node);
-            navigator.clipboard.writeText(schemaStr).then(() => {
-                copyBtn.textContent = "✅ Copied API Node!";
-                copyBtn.style.color = "#80c77d";
-                setTimeout(() => {
-                    copyBtn.textContent = "📋 Copy Schema";
-                    copyBtn.style.color = "";
-                }, 2000);
-            });
-        };
-        
-        const detailsEl = document.createElement("details");
-        detailsEl.className = "mai-api-details";
-        if (node.__mAI_api_details_open) detailsEl.open = true;
-
-        const summaryEl = document.createElement("summary");
-        summaryEl.textContent = "👁 View Live API Schema";
-        
-        const preEl = document.createElement("pre");
-        preEl.textContent = generateImageLoaderSchema(node);
-        
-        detailsEl.appendChild(summaryEl);
-        detailsEl.appendChild(preEl);
-        
-        detailsEl.addEventListener("toggle", () => {
-            if (node.__mAI_api_details_open === detailsEl.open) return;
-            node.__mAI_api_details_open = detailsEl.open;
-            
-            const EXPANDED_DELTA = 216;
-            if (detailsEl.open) {
-                node.size[1] += EXPANDED_DELTA;
-            } else {
-                node.size[1] -= EXPANDED_DELTA;
-            }
-            
-            if (node.__mAI_ImageLoader_domWidget) {
-                node.__mAI_ImageLoader_domWidget.computeSize(node.size[0]);
-            }
-            app.canvas.setDirty(true, true);
-        });
-
-        detailsEl.addEventListener("click", () => {
-            if (!detailsEl.open) {
-                updateNodeUI(node);
-            }
-        });
-
-        container.appendChild(detailsEl);
-        
         apiFooter.appendChild(idLabel);
-        apiFooter.appendChild(copyBtn);
         container.appendChild(apiFooter);
 
         const domWidget = node.addDOMWidget("mai_image_loader_footer", "div", container, { serialize: false, hideOnZoom: false });
         
         domWidget.computeSize = function(width) {
             let contentHeight = 85; // Base padding + Add Bar + Footer
-            
-            // Add details block height
-            const detailsOpen = node.__mAI_api_details_open || false;
-            contentHeight += detailsOpen ? 242 : 26; // 242 open, 26 closed
+
             
             const containerHeight = Math.min(800, contentHeight);
 
