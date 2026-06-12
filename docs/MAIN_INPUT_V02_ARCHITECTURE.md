@@ -36,8 +36,7 @@ The hidden `fields_config` widget is the source of truth for workflow save/load
 and API export. It must remain present in `node.widgets` and serializable even
 while hidden. Frontend layout code must treat it as protected state: it must
 not be moved, removed, used as an upload/image widget, or used as a layout
-spacer. Dynamic field widgets are marked with `serialize = false`, so they do
-not become independent serialized state.
+spacer. Dynamic fields and add-field controls are now rendered inside a single HTML `DOMWidget` appended after the fixed widgets, so they do not become independent serialized state.
 
 `size_preset`, `width`, `height`, `User_prompt`, `image` (the internal name of the main image widget), and
 `Mask_override_image` are ordinary serialized widgets. API workflows can set
@@ -47,7 +46,7 @@ backend.
 
 The backend `INPUT_TYPES` order is `size_preset`, `width`, `height`,
 `User_prompt`, `image` (displayed as `Main_image`), `Mask_override_image`, then
-`fields_config`. Frontend dynamic field buttons are added only after those
+`fields_config`. The frontend DOMWidget is added only after those
 fixed backend widgets exist, so the native image widgets stay before dynamic
 scalar field controls without manually reordering `node.widgets`.
 
@@ -78,8 +77,7 @@ or sessionStorage.
   fields_config recovery, canvas dirty marking, warnings, and rebuild
   scheduling.
 - `field_widgets.js`: fixed size widget callbacks, safe image/mask widget
-  setup and image list refresh, add/remove field controls, dynamic widget
-  creation, widget relabeling, resize behavior, and `rebuildFromConfig`.
+  setup and image list refresh, DOMWidget creation, HTML rendering of dynamic fields, resize behavior, and `rebuildFromConfig`.
 - `output_sync.js`: output socket creation/removal/rename and link-preserving
   reload normalization.
 
@@ -92,9 +90,9 @@ To prevent race conditions during ComfyUI reload, the frontend tracks a node-ins
 4. When the timer fires, `restoreFromCurrentNodeState(node)` is executed, which resets `node.__mAI_MainInputV02_restoring = false` and performs a rebuild of the dynamic widgets and outputs.
 
 By waiting 50ms, the restore pass ensures that ComfyUI has fully loaded all serialized widgets, established links, and set values.
-The rebuild reads `fields_config`, removes previous dynamic field widgets, recreates the visible field widgets, and normalizes the output sockets. Output normalization always emits fixed `width`, `height`, `User_prompt`, `Main_image`, and `Main_mask` descriptors first, then appends dynamic field descriptors.
+The rebuild reads `fields_config`, normalizes the output sockets, and calls `renderDOMFields(node)` to recreate the HTML field list. Output normalization always emits fixed `width`, `height`, `User_prompt`, `Main_image`, and `Main_mask` descriptors first, then appends dynamic field descriptors.
 If the fixed backend widgets are not present yet, the frontend does not add the
-dynamic field buttons or rebuild dynamic widgets during that pass.
+DOMWidget or rebuild HTML fields during that pass.
 
 For stability, the frontend intentionally does not create custom image preview
 widgets, suppress ComfyUI's native image preview, relabel native upload buttons,

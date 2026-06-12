@@ -26,6 +26,16 @@ import {
 
 let nextRuntimeId = 1;
 
+function addStylesheet() {
+    if (document.getElementById("mai-main-input-css")) return;
+    const style = document.createElement("link");
+    style.id = "mai-main-input-css";
+    style.rel = "stylesheet";
+    style.type = "text/css";
+    style.href = new URL("../css/main_input.css", import.meta.url).href;
+    document.head.appendChild(style);
+}
+
 const STATIC_IMAGE_WIDGETS = [
     {
         widgetName: "image",
@@ -57,13 +67,85 @@ export function ensureControls(node) {
         return false;
     }
 
-    if (!node.__mAI_MainInputV02_controlsAdded) {
-        node.__mAI_MainInputV02_controlsAdded = true;
-        addButton(node, "+ String", () => addField(node, "STRING"));
-        addButton(node, "+ Dropdown", () => addField(node, "DROPDOWN"));
-        addButton(node, "+ Int", () => addField(node, "INT"));
-        addButton(node, "+ Float", () => addField(node, "FLOAT"));
-        addButton(node, "+ Boolean", () => addField(node, "BOOLEAN"));
+    if (!node.__mAI_MainInputV02_domWidget) {
+        addStylesheet();
+
+        const container = document.createElement("div");
+        container.className = "mai-dynamic-container";
+
+        const stopProp = (e) => e.stopPropagation();
+        container.addEventListener("pointerdown", stopProp);
+        container.addEventListener("mousedown", stopProp);
+        container.addEventListener("dblclick", stopProp);
+        container.addEventListener("wheel", stopProp);
+        container.addEventListener("keydown", stopProp);
+
+        const listDiv = document.createElement("div");
+        listDiv.className = "mai-dynamic-list";
+        node.__mAI_MainInputV02_listDiv = listDiv;
+
+        const addBar = document.createElement("div");
+        addBar.className = "mai-add-bar";
+
+        const typeSelect = document.createElement("select");
+        typeSelect.className = "mai-add-select";
+        const fieldTypes = [
+            { value: "STRING", text: "📝 STRING" },
+            { value: "DROPDOWN", text: "🔽 DROPDOWN" },
+            { value: "INT", text: "🔢 INT" },
+            { value: "FLOAT", text: "〰 FLOAT" },
+            { value: "BOOLEAN", text: "☑ BOOLEAN" }
+        ];
+        fieldTypes.forEach(t => {
+            const opt = document.createElement("option");
+            opt.value = t.value;
+            opt.innerText = t.text;
+            typeSelect.appendChild(opt);
+        });
+
+        const addBtn = document.createElement("button");
+        addBtn.className = "mai-add-button";
+        addBtn.innerText = "+ Add Field";
+        addBtn.addEventListener("click", () => addField(node, typeSelect.value));
+
+        addBar.appendChild(typeSelect);
+        addBar.appendChild(addBtn);
+
+        container.appendChild(listDiv);
+        container.appendChild(addBar);
+
+        const domWidget = node.addDOMWidget("mai_dynamic_fields", "div", container, { serialize: false, hideOnZoom: false });
+        domWidget.computeSize = function(width) {
+            const fields = node.__mAI_MainInputV02_fields || [];
+            const contentHeight = fields.length === 0 ? 40 : (fields.length * 34) + 48;
+            const finalHeight = Math.min(300, contentHeight);
+
+            const currentWidth = node.size ? node.size[0] : width;
+            const domWidth = Math.max(10, currentWidth - 30);
+
+            if (container && container.style) {
+                container.style.height = `${finalHeight}px`;
+                container.style.minHeight = `${finalHeight}px`;
+                container.style.width = `${domWidth}px`;
+                container.style.maxWidth = `${domWidth}px`;
+            }
+            
+            return [220, finalHeight]; // Safe minimum width
+        };
+        node.__mAI_MainInputV02_domWidget = domWidget;
+        
+        const originalOnResize = node.onResize;
+        node.onResize = function(size) {
+            const result = originalOnResize ? originalOnResize.apply(this, arguments) : undefined;
+            if (container && container.style && size) {
+                const domWidth = Math.max(10, size[0] - 30);
+                container.style.width = `${domWidth}px`;
+                container.style.maxWidth = `${domWidth}px`;
+            }
+            return result;
+        };
+
+        renderDOMFields(node);
     }
 
     markCanvasDirty();
@@ -180,11 +262,113 @@ function applySizePreset(sizePresetWidget, widthWidget, heightWidget, presetName
 }
 
 
-export function addButton(node, name, callback) {
-    const widget = node.addWidget("button", name, null, callback);
-    widget.__mAI_MainInputV02_control = true;
-    widget.serialize = false;
-    return widget;
+export function renderDOMFields(node) {
+    if (!node.__mAI_MainInputV02_listDiv) return;
+
+    const listDiv = node.__mAI_MainInputV02_listDiv;
+    listDiv.innerHTML = "";
+
+    const fields = getFieldState(node);
+    for (const field of fields) {
+        const row = document.createElement("div");
+        row.className = "mai-field-row";
+
+        const nameInput = document.createElement("input");
+        nameInput.className = "mai-field-name";
+        nameInput.type = "text";
+        nameInput.value = field.name;
+        nameInput.addEventListener("change", (e) => {
+            const nextName = normalizeName(e.target.value, field.name);
+            field.name = nextName;
+            e.target.value = nextName;
+            updateOutputName(node, field.id, nextName);
+            writeFieldsConfig(node, getFieldState(node));
+        });
+
+        row.appendChild(nameInput);
+
+        if (field.type === "BOOLEAN") {
+            const valInput = document.createElement("input");
+            valInput.className = "mai-field-value";
+            valInput.type = "checkbox";
+            valInput.checked = field.value;
+            valInput.addEventListener("change", (e) => {
+                field.value = normalizeBoolean(e.target.checked);
+                writeFieldsConfig(node, getFieldState(node));
+            });
+            row.appendChild(valInput);
+        } else if (field.type === "DROPDOWN") {
+            const valContainer = document.createElement("div");
+            valContainer.style.display = "flex";
+            valContainer.style.flexDirection = "column";
+            valContainer.style.gap = "2px";
+            
+            const optInput = document.createElement("input");
+            optInput.className = "mai-field-value";
+            optInput.type = "text";
+            optInput.placeholder = "options (comma separated)";
+            optInput.value = (field.options ?? []).join(", ");
+            
+            const selInput = document.createElement("select");
+            selInput.className = "mai-field-value";
+            (field.options ?? []).forEach(opt => {
+                const o = document.createElement("option");
+                o.value = opt;
+                o.innerText = opt;
+                selInput.appendChild(o);
+            });
+            selInput.value = field.value;
+
+            optInput.addEventListener("change", (e) => {
+                field.options = normalizeOptions(e.target.value);
+                if (!field.options.includes(field.value)) {
+                    field.value = field.options[0] ?? "";
+                }
+                writeFieldsConfig(node, getFieldState(node));
+                renderDOMFields(node);
+            });
+
+            selInput.addEventListener("change", (e) => {
+                field.value = normalizeString(e.target.value);
+                writeFieldsConfig(node, getFieldState(node));
+            });
+
+            valContainer.appendChild(optInput);
+            valContainer.appendChild(selInput);
+            row.appendChild(valContainer);
+        } else {
+            const valInput = document.createElement("input");
+            valInput.className = "mai-field-value";
+            if (field.type === "INT" || field.type === "FLOAT") {
+                valInput.type = "number";
+                valInput.step = field.type === "INT" ? "1" : "0.01";
+            } else {
+                valInput.type = "text";
+            }
+            valInput.value = field.value;
+            valInput.addEventListener("change", (e) => {
+                if (field.type === "INT" || field.type === "FLOAT") {
+                    field.value = normalizeValue(e.target.value, field.type);
+                } else {
+                    field.value = normalizeString(e.target.value);
+                }
+                writeFieldsConfig(node, getFieldState(node));
+            });
+            row.appendChild(valInput);
+        }
+
+        const rmBtn = document.createElement("button");
+        rmBtn.className = "mai-field-remove";
+        rmBtn.innerText = "✖";
+        rmBtn.addEventListener("click", () => removeField(node, field.id));
+        row.appendChild(rmBtn);
+
+        listDiv.appendChild(row);
+    }
+
+    requestAnimationFrame(() => {
+        resizeNode(node);
+    });
 }
 
 
@@ -198,8 +382,8 @@ export function addField(node, type) {
     const field = createDefaultField(type, fields);
     fields.push(field);
     writeFieldsConfig(node, fields);
-    addFieldWidgets(node, field);
     addOutputForField(node, field);
+    renderDOMFields(node);
     resizeNode(node);
 }
 
@@ -249,89 +433,6 @@ export function nextFieldId(fields) {
 }
 
 
-export function addFieldWidgets(node, field) {
-    node.__mAI_MainInputV02_fieldWidgets ??= {};
-
-    const widgets = {};
-    let nameWidget;
-    nameWidget = node.addWidget("text", `${field.type} name`, field.name, (value) => {
-        const nextName = normalizeName(value, field.name);
-        field.name = nextName;
-        nameWidget.value = nextName;
-        updateOutputName(node, field.id, nextName);
-        refreshFieldWidgetLabels(node, field);
-        writeFieldsConfig(node, getFieldState(node));
-        resizeNode(node);
-    });
-    tagFieldWidget(nameWidget, field.id);
-    widgets.name = nameWidget;
-
-    if (field.type === "STRING") {
-        widgets.value = addStringValueWidget(node, `${field.name} value`, field.value, (value) => {
-            field.value = normalizeString(value);
-            writeFieldsConfig(node, getFieldState(node));
-            resizeNode(node);
-        });
-        tagFieldWidget(widgets.value, field.id);
-    } else if (field.type === "DROPDOWN") {
-        widgets.options = node.addWidget(
-            "text",
-            `${field.name} options`,
-            (field.options ?? []).join(", "),
-            (value) => {
-                field.options = normalizeOptions(value);
-                if (!field.options.includes(field.value)) {
-                    field.value = field.options[0] ?? "";
-                }
-                refreshDropdownWidget(widgets.selected, field);
-                writeFieldsConfig(node, getFieldState(node));
-            }
-        );
-        tagFieldWidget(widgets.options, field.id);
-
-        widgets.selected = node.addWidget(
-            "combo",
-            `${field.name} value`,
-            field.value,
-            (value) => {
-                field.value = normalizeString(value);
-                writeFieldsConfig(node, getFieldState(node));
-            },
-            { values: field.options ?? [] }
-        );
-        tagFieldWidget(widgets.selected, field.id);
-    } else if (field.type === "INT") {
-        widgets.value = node.addWidget("number", `${field.name} value`, field.value, (value) => {
-            field.value = normalizeValue(value, "INT");
-            writeFieldsConfig(node, getFieldState(node));
-        }, { precision: 0, step: 1 });
-        tagFieldWidget(widgets.value, field.id);
-    } else if (field.type === "FLOAT") {
-        widgets.value = node.addWidget("number", `${field.name} value`, field.value, (value) => {
-            field.value = normalizeValue(value, "FLOAT");
-            writeFieldsConfig(node, getFieldState(node));
-        }, { step: 0.01 });
-        tagFieldWidget(widgets.value, field.id);
-    } else if (field.type === "BOOLEAN") {
-        widgets.value = node.addWidget("toggle", `${field.name} value`, field.value, (value) => {
-            field.value = normalizeBoolean(value);
-            writeFieldsConfig(node, getFieldState(node));
-        });
-        tagFieldWidget(widgets.value, field.id);
-    }
-
-    widgets.remove = node.addWidget("button", `Remove ${field.name}`, null, () => removeField(node, field.id));
-    tagFieldWidget(widgets.remove, field.id);
-
-    node.__mAI_MainInputV02_fieldWidgets[field.id] = widgets;
-}
-
-
-export function addStringValueWidget(node, name, value, callback) {
-    return node.addWidget("text", name, value ?? "", callback);
-}
-
-
 async function refreshImageChoices(widget, isMaskOverride = false) {
     try {
         const response = await api.fetchApi("/object_info/LoadImage");
@@ -359,46 +460,6 @@ function withCurrentValue(values, currentValue) {
 }
 
 
-export function tagFieldWidget(widget, fieldId) {
-    widget.__mAI_MainInputV02_dynamicField = true;
-    widget.__mAI_MainInputV02_fieldId = fieldId;
-    widget.serialize = false;
-    return widget;
-}
-
-
-export function refreshFieldWidgetLabels(node, field) {
-    const widgets = node.__mAI_MainInputV02_fieldWidgets?.[field.id];
-    if (!widgets) {
-        return;
-    }
-
-    if (widgets.value) {
-        widgets.value.name = `${field.name} value`;
-    }
-    if (widgets.options) {
-        widgets.options.name = `${field.name} options`;
-    }
-    if (widgets.selected) {
-        widgets.selected.name = `${field.name} value`;
-    }
-    if (widgets.remove) {
-        widgets.remove.name = `Remove ${field.name}`;
-    }
-}
-
-
-export function refreshDropdownWidget(widget, field) {
-    if (!widget) {
-        return;
-    }
-
-    widget.options ??= {};
-    widget.options.values = field.options ?? [];
-    widget.value = field.value;
-}
-
-
 export function removeField(node, fieldId) {
     const fields = getFieldState(node);
     const index = fields.findIndex((field) => field.id === fieldId);
@@ -407,42 +468,23 @@ export function removeField(node, fieldId) {
     }
 
     fields.splice(index, 1);
-    removeWidgetsForField(node, fieldId);
     removeOutputForField(node, fieldId, index);
     writeFieldsConfig(node, fields);
+    renderDOMFields(node);
     resizeNode(node);
-}
-
-
-export function removeDynamicFieldWidgets(node) {
-    if (!node.widgets) {
-        return;
-    }
-
-    node.widgets = node.widgets.filter((widget) => widget.__mAI_MainInputV02_dynamicField !== true);
-    node.__mAI_MainInputV02_fieldWidgets = {};
-}
-
-
-export function removeWidgetsForField(node, fieldId) {
-    if (!node.widgets) {
-        return;
-    }
-
-    node.widgets = node.widgets.filter((widget) => widget.__mAI_MainInputV02_fieldId !== fieldId);
-    delete node.__mAI_MainInputV02_fieldWidgets?.[fieldId];
 }
 
 
 export function resizeNode(node) {
     const computedSize = node.computeSize?.();
-    if (!computedSize) {
+    if (!computedSize || !node.size) {
         markCanvasDirty();
         return;
     }
 
-    const currentWidth = Array.isArray(node.size) ? node.size[0] : computedSize[0];
-    node.setSize([Math.max(currentWidth, computedSize[0]), computedSize[1]]);
+    // Directly set the height. Do NOT use node.setSize() because LiteGraph 
+    // forces the width to expand to the image preview's natural resolution.
+    node.size[1] = computedSize[1];
     markCanvasDirty();
 }
 
@@ -461,12 +503,8 @@ export function rebuildFromConfig(node) {
     }
 
     node.__mAI_MainInputV02_fields = fields;
-    removeDynamicFieldWidgets(node);
-    for (const field of fields) {
-        addFieldWidgets(node, field);
-    }
-
     normalizeOutputsAfterLoad(node, fields);
+    renderDOMFields(node);
     resizeNode(node);
 }
 

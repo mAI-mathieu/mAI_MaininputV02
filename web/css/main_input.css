@@ -1,0 +1,134 @@
+.mai-dynamic-container, .mai-dynamic-container * {
+    box-sizing: border-box;
+}
+
+.mai-dynamic-container {
+    display: flex;
+    flex-direction: column;
+    pointer-events: auto;
+    background-color: var(--comfy-menu-bg, #2b2b2b);
+    border-radius: 4px;
+    padding: 8px;
+    font-family: var(--font, sans-serif);
+    color: var(--fg-color, #fff);
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.mai-dynamic-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    max-height: 300px;
+    padding-right: 4px; /* Space for scrollbar */
+}
+
+/* Custom scrollbar for list */
+.mai-dynamic-list::-webkit-scrollbar {
+    width: 6px;
+}
+.mai-dynamic-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+.mai-dynamic-list::-webkit-scrollbar-thumb {
+    background: var(--border-color, #444);
+    border-radius: 3px;
+}
+.mai-dynamic-list::-webkit-scrollbar-thumb:hover {
+    background: var(--descrip-text, #777);
+}
+
+.mai-field-row {
+    display: grid;
+    grid-template-columns: 120px 1fr 30px;
+    gap: 6px;
+    align-items: center;
+    background-color: var(--bg-color, #222);
+    padding: 4px;
+    border-radius: 3px;
+    border: 1px solid var(--border-color, #333);
+    width: 100%;
+}
+
+.mai-field-name,
+.mai-field-value {
+    background-color: var(--comfy-input-bg, #1e1e1e);
+    color: var(--input-text, #fff);
+    border: 1px solid var(--border-color, #444);
+    border-radius: 2px;
+    padding: 2px 4px;
+    font-size: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    outline: none;
+}
+
+.mai-field-name:focus,
+.mai-field-value:focus {
+    border-color: #79a7d8;
+    outline: none;
+}
+
+/* Checkbox specific styling */
+input[type="checkbox"].mai-field-value {
+    width: auto;
+    cursor: pointer;
+    margin: 0;
+}
+
+.mai-field-remove {
+    background: transparent;
+    color: var(--error-text, #ff5555);
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mai-field-remove:hover {
+    color: #ff0000;
+}
+
+.mai-add-bar {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+    align-items: center;
+    padding-top: 4px;
+}
+.mai-add-bar button {
+    white-space: nowrap;
+}
+.mai-dynamic-list:empty {
+    display: none;
+}
+
+.mai-add-select {
+    background-color: var(--comfy-input-bg, #1e1e1e);
+    color: var(--input-text, #fff);
+    border: 1px solid var(--border-color, #444);
+    border-radius: 2px;
+    padding: 2px 4px;
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+}
+
+.mai-add-button {
+    background-color: var(--comfy-menu-bg, #333);
+    color: var(--fg-color, #fff);
+    border: 1px solid var(--border-color, #555);
+    border-radius: 2px;
+    padding: 2px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+
+.mai-add-button:hover {
+    background-color: var(--border-color, #444);
+}
