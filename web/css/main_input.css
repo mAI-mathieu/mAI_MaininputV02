@@ -127,3 +127,61 @@ input[type="checkbox"].mai-field-value {
 .mai-add-button:hover {
     background-color: var(--border-color, #444);
 }
+
+.mai-api-footer {
+    margin-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #151b23;
+    border: 1px solid #35475a;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: #91a4b7;
+    font-size: 11px;
+}
+.mai-api-footer button {
+    background: #243447;
+    border: 1px solid #4f657a;
+    color: #eef4fb;
+    border-radius: 3px;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 10px;
+}
+.mai-api-footer button:hover {
+    background: #2e4259;
+    border-color: #79a7d8;
+}
+
+.mai-api-details {
+    margin-top: 8px;
+    background: #111923;
+    border: 1px solid #35475a;
+    border-radius: 4px;
+    color: #91a4b7;
+    font-size: 11px;
+    overflow: hidden;
+}
+.mai-api-details summary {
+    padding: 6px 8px;
+    cursor: pointer;
+    font-weight: bold;
+    background: #151b23;
+    user-select: none;
+    outline: none;
+}
+.mai-api-details summary:hover {
+    background: #1e293b;
+    color: #eef4fb;
+}
+.mai-api-details pre {
+    margin: 10px 0 6px 0;
+    padding: 8px;
+    height: 200px;
+    overflow-y: auto;
+    color: #80c77d;
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
