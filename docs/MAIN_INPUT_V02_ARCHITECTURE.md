@@ -98,6 +98,8 @@ Output matching priority:
 3. Dynamic fallback output at the expected index only when it has links
 4. Matching output name
 
+During the output synchronization phase, the frontend must explicitly override BOTH the `.name` and `.label` properties of the LiteGraph output sockets. This prevents LiteGraph from visually reverting to the Python backend's fallback names (e.g., out_1, out_2) when workflows are reloaded.
+
 When links move, `app.graph.links[linkId].origin_slot` is updated to the new
 output index.
 

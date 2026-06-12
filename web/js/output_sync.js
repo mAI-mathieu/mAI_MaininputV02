@@ -32,12 +32,14 @@ function ensureFixedOutputsForAppend(node) {
         const descriptor = FIXED_OUTPUT_DESCRIPTORS[index];
         if (node.outputs[index]) {
             node.outputs[index].name = descriptor.name;
+            node.outputs[index].label = descriptor.name;
             node.outputs[index].type = descriptor.type;
             node.outputs[index].__mAI_MainInputV02_fieldId = descriptor.fieldId;
         } else {
             node.addOutput(descriptor.name, descriptor.type);
             const output = node.outputs?.[node.outputs.length - 1];
             if (output) {
+                output.label = descriptor.name;
                 output.__mAI_MainInputV02_fieldId = descriptor.fieldId;
             }
         }
@@ -65,6 +67,7 @@ export function updateOutputName(node, fieldId, name) {
     }
 
     node.outputs[outputIndex].name = name;
+    node.outputs[outputIndex].label = name;
     markCanvasDirty();
 }
 
@@ -149,22 +152,22 @@ export function normalizeOutputsAfterLoad(node, fields) {
             usedOldIndexes
         );
 
-        let oldOutput = null;
+        let output;
         let links = null;
         if (oldIndex >= 0 && currentOutputs[oldIndex]) {
-            oldOutput = currentOutputs[oldIndex];
-            links = oldOutput.links ?? null;
+            output = currentOutputs[oldIndex];
+            links = output.links ?? null;
             usedOldIndexes.add(oldIndex);
+        } else {
+            output = {};
         }
 
-        const output = {
-            ...(oldOutput ?? {}),
-            name: descriptor.name,
-            type: descriptor.type,
-            links,
-        };
-
+        output.name = descriptor.name;
+        output.label = descriptor.name;
+        output.type = descriptor.type;
+        output.links = links;
         output.__mAI_MainInputV02_fieldId = descriptor.fieldId;
+
         nextOutputs.push(output);
 
         updateLinkOriginSlots(links, newIndex);
@@ -185,7 +188,7 @@ function appendUnexpectedLinkedOutputs(currentOutputs, usedOldIndexes, nextOutpu
         }
 
         const newIndex = nextOutputs.length;
-        nextOutputs.push({ ...output, links });
+        nextOutputs.push(output);
         updateLinkOriginSlots(links, newIndex);
     }
 }
