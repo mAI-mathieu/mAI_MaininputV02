@@ -135,7 +135,6 @@ export function ensureControls(node) {
         typeSelect.className = "mai-add-select";
         const fieldTypes = [
             { value: "STRING", text: "📝 STRING" },
-            { value: "DROPDOWN", text: "🔽 DROPDOWN" },
             { value: "INT", text: "🔢 INT" },
             { value: "FLOAT", text: "〰 FLOAT" },
             { value: "BOOLEAN", text: "☑ BOOLEAN" }
@@ -160,21 +159,32 @@ export function ensureControls(node) {
 
         const domWidget = node.addDOMWidget("mai_dynamic_fields", "div", container, { serialize: false, hideOnZoom: false });
         domWidget.computeSize = function(width) {
+            let contentHeight = 48; // Base padding + Add Bar
             const fields = node.__mAI_MainInputV02_fields || [];
-            const contentHeight = fields.length === 0 ? 40 : (fields.length * 34) + 48;
-            const finalHeight = Math.min(300, contentHeight);
+            if (fields.length === 0) {
+                contentHeight = 40;
+            } else {
+                for (const f of fields) {
+                    if (f.type === "STRING") {
+                        contentHeight += 60;
+                    } else {
+                        contentHeight += 34;
+                    }
+                }
+            }
+            const containerHeight = Math.min(500, contentHeight);
 
             const currentWidth = node.size ? node.size[0] : width;
             const domWidth = Math.max(10, currentWidth - 30);
 
             if (container && container.style) {
-                container.style.height = `${finalHeight}px`;
-                container.style.minHeight = `${finalHeight}px`;
+                container.style.height = `${containerHeight}px`;
+                container.style.minHeight = `${containerHeight}px`;
                 container.style.width = `${domWidth}px`;
                 container.style.maxWidth = `${domWidth}px`;
             }
             
-            return [220, finalHeight]; // Safe minimum width
+            return [220, containerHeight + 10]; // Safe minimum width
         };
         node.__mAI_MainInputV02_domWidget = domWidget;
         
@@ -201,6 +211,39 @@ function setupFixedWidgets(node) {
     setupSizeWidgets(node);
     setupMainImageWidget(node);
     setupMaskOverrideImageWidget(node);
+    setupUserPromptWidget(node);
+}
+
+function setupUserPromptWidget(node) {
+    const widget = findNodeWidget(node, "User_prompt");
+    if (!widget || !widget.inputEl) return;
+
+    widget.inputEl.style.resize = "none";
+    widget.inputEl.style.overflow = "hidden";
+
+    const autoResize = () => {
+        // Reset to auto to measure true scrollHeight
+        widget.inputEl.style.height = "auto";
+        const scrollHeight = widget.inputEl.scrollHeight;
+        const newHeight = Math.max(40, scrollHeight);
+
+        // Set the actual DOM element height
+        widget.inputEl.style.height = newHeight + "px";
+
+        // IMPORTANT: Tell LiteGraph the new height of this specific widget 
+        // so it pushes the subsequent widgets (like Main_image) down.
+        widget.computeSize = function(width) {
+            return [width, newHeight + 10]; // +10 for comfortable padding
+        };
+
+        // Trigger our safe vertical-only resize function
+        resizeNode(node);
+    };
+
+    widget.inputEl.addEventListener("input", autoResize);
+    
+    // Trigger once on load to set the initial height correctly
+    requestAnimationFrame(() => autoResize());
 }
 
 
@@ -341,45 +384,19 @@ export function renderDOMFields(node) {
                 writeFieldsConfig(node, getFieldState(node));
             });
             row.appendChild(valInput);
-        } else if (field.type === "DROPDOWN") {
-            const valContainer = document.createElement("div");
-            valContainer.style.display = "flex";
-            valContainer.style.flexDirection = "column";
-            valContainer.style.gap = "2px";
-            
-            const optInput = document.createElement("input");
-            optInput.className = "mai-field-value";
-            optInput.type = "text";
-            optInput.placeholder = "options (comma separated)";
-            optInput.value = (field.options ?? []).join(", ");
-            
-            const selInput = document.createElement("select");
-            selInput.className = "mai-field-value";
-            (field.options ?? []).forEach(opt => {
-                const o = document.createElement("option");
-                o.value = opt;
-                o.innerText = opt;
-                selInput.appendChild(o);
-            });
-            selInput.value = field.value;
-
-            optInput.addEventListener("change", (e) => {
-                field.options = normalizeOptions(e.target.value);
-                if (!field.options.includes(field.value)) {
-                    field.value = field.options[0] ?? "";
-                }
-                writeFieldsConfig(node, getFieldState(node));
-                renderDOMFields(node);
-            });
-
-            selInput.addEventListener("change", (e) => {
+        } else if (field.type === "STRING") {
+            const valInput = document.createElement("textarea");
+            valInput.className = "mai-field-value";
+            valInput.style.resize = "none";
+            valInput.style.height = "54px"; // Approximately 3 lines
+            valInput.spellcheck = false;
+            valInput.value = field.value || "";
+            valInput.addEventListener("input", (e) => {
                 field.value = normalizeString(e.target.value);
                 writeFieldsConfig(node, getFieldState(node));
+                markCanvasDirty();
             });
-
-            valContainer.appendChild(optInput);
-            valContainer.appendChild(selInput);
-            row.appendChild(valContainer);
+            row.appendChild(valInput);
         } else {
             const valInput = document.createElement("input");
             valInput.className = "mai-field-value";
@@ -442,10 +459,7 @@ export function createDefaultField(type, fields) {
         value: "",
     };
 
-    if (type === "DROPDOWN") {
-        field.options = ["option_1", "option_2"];
-        field.value = field.options[0];
-    } else if (type === "INT") {
+    if (type === "INT") {
         field.value = 0;
     } else if (type === "FLOAT") {
         field.value = 0.0;

@@ -248,8 +248,6 @@ class mAI_MainInputV02:
 
         if field_type == "STRING":
             return field["value"]
-        if field_type == "DROPDOWN":
-            return field["value"]
         if field_type == "INT":
             return field["value"]
         if field_type == "FLOAT":

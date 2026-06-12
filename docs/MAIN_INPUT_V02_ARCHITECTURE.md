@@ -59,9 +59,8 @@ Each field stores:
 
 - `id`: stable field identifier
 - `name`: output/widget label
-- `type`: `STRING`, `DROPDOWN`, `INT`, `FLOAT`, or `BOOLEAN`
+- `type`: `STRING`, `INT`, `FLOAT`, or `BOOLEAN`
 - `value`: current field value
-- `options`: dropdown options, only for `DROPDOWN`
 
 Per-node runtime state is stored on the node instance with
 `__mAI_MainInputV02_*` properties. There is no shared field config, localStorage,
@@ -160,7 +159,7 @@ arbitrary filesystem paths from workflow/API JSON would let a workflow read
 local files outside ComfyUI's managed input directory. API callers should upload
 or copy mask files into `ComfyUI/input` first, then pass the resulting filename.
 
-Dynamic `IMAGE` and `MASK` fields are not supported. Only scalar field types (`STRING`, `DROPDOWN`, `INT`, `FLOAT`, and `BOOLEAN`) are supported.
+Dynamic `IMAGE` and `MASK` fields are not supported. Only scalar field types (`STRING`, `INT`, `FLOAT`, and `BOOLEAN`) are supported.
 
 If an old workflow or API export contains a dynamic `IMAGE` or `MASK` field in `fields_config`, backend validation will raise a descriptive `ValueError` explaining that dynamic `IMAGE`/`MASK` fields were removed and should be replaced by fixed `Main_image`/`Main_mask` outputs.
 

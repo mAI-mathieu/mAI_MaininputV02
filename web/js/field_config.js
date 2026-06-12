@@ -51,12 +51,6 @@ export function validateField(item, index) {
         type,
     };
 
-    if (type === "DROPDOWN") {
-        field.options = normalizeOptions(item.options);
-        field.value = normalizeString(item.value ?? field.options[0] ?? "");
-        return field;
-    }
-
     field.value = normalizeValue(item.value, type);
     return field;
 }
@@ -70,10 +64,6 @@ export function serializeFields(fields) {
             type: field.type,
             value: field.value,
         };
-
-        if (field.type === "DROPDOWN") {
-            item.options = [...(field.options ?? [])];
-        }
 
         return item;
     });

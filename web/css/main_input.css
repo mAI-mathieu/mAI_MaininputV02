@@ -7,7 +7,8 @@
     flex-direction: column;
     pointer-events: auto;
     background-color: var(--comfy-menu-bg, #2b2b2b);
-    border-radius: 4px;
+    border-radius: 8px;
+    overflow: hidden;
     padding: 8px;
     font-family: var(--font, sans-serif);
     color: var(--fg-color, #fff);
@@ -52,20 +53,23 @@
 }
 
 .mai-field-name,
-.mai-field-value {
+.mai-field-value,
+textarea.mai-field-value {
     background-color: var(--comfy-input-bg, #1e1e1e);
     color: var(--input-text, #fff);
     border: 1px solid var(--border-color, #444);
     border-radius: 2px;
-    padding: 2px 4px;
+    padding: 4px 6px;
     font-size: 12px;
+    font-family: inherit;
     width: 100%;
     box-sizing: border-box;
     outline: none;
 }
 
 .mai-field-name:focus,
-.mai-field-value:focus {
+.mai-field-value:focus,
+textarea.mai-field-value:focus {
     border-color: #79a7d8;
     outline: none;
 }
