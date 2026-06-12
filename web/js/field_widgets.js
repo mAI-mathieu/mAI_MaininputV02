@@ -37,24 +37,12 @@ function addStylesheet() {
     document.head.appendChild(style);
 }
 
-const STATIC_IMAGE_WIDGETS = [
-    {
-        widgetName: "image",
-        displayName: "Main_image",
-    },
-    {
-        widgetName: "Mask_override_image",
-        displayName: "Mask_override_image",
-    },
-];
 
 const REQUIRED_FIXED_WIDGET_NAMES = [
     "size_preset",
     "width",
     "height",
     "User_prompt",
-    "image",
-    "Mask_override_image",
     CONFIG_WIDGET,
 ];
 
@@ -66,50 +54,6 @@ export function ensureControls(node) {
     if (!fixedBackendWidgetsReady(node)) {
         markCanvasDirty();
         return false;
-    }
-
-    if (!node.__mAI_MainInputV02_maskUploadAdded) {
-        node.__mAI_MainInputV02_maskUploadAdded = true;
-        const maskWidget = findNodeWidget(node, "Mask_override_image");
-        
-        if (maskWidget) {
-            const btn = node.addWidget("button", "📁 Upload Mask Override", null, () => {
-                const input = document.createElement("input");
-                input.type = "file";
-                input.accept = "image/png,image/jpeg,image/webp";
-                input.style.display = "none";
-                
-                input.onchange = async () => {
-                    if (!input.files || input.files.length === 0) return;
-                    
-                    const body = new FormData();
-                    body.append("image", input.files[0]);
-                    body.append("type", "input");
-                    
-                    try {
-                        const resp = await api.fetchApi("/upload/image", { method: "POST", body });
-                        if (resp.status === 200) {
-                            const data = await resp.json();
-                            // Ensure the new filename is in the dropdown options
-                            if (maskWidget.options && maskWidget.options.values) {
-                                if (!maskWidget.options.values.includes(data.name)) {
-                                    maskWidget.options.values.unshift(data.name);
-                                }
-                            }
-                            maskWidget.value = data.name;
-                            markCanvasDirty();
-                        }
-                    } catch (err) {
-                        console.error("Mask upload failed:", err);
-                    }
-                };
-                
-                document.body.appendChild(input);
-                input.click();
-                setTimeout(() => { if (input.parentNode) input.parentNode.removeChild(input); }, 1000);
-            });
-            btn.serialize = false;
-        }
     }
 
     if (!node.__mAI_MainInputV02_domWidget) {
@@ -209,8 +153,6 @@ export function ensureControls(node) {
 
 function setupFixedWidgets(node) {
     setupSizeWidgets(node);
-    setupMainImageWidget(node);
-    setupMaskOverrideImageWidget(node);
     setupUserPromptWidget(node);
 }
 
@@ -308,31 +250,6 @@ function setupSizeWidgets(node) {
 }
 
 
-function setupMainImageWidget(node) {
-    setupImageWidget(node, STATIC_IMAGE_WIDGETS[0], true);
-}
-
-
-function setupMaskOverrideImageWidget(node) {
-    setupImageWidget(node, STATIC_IMAGE_WIDGETS[1], true);
-}
-
-
-function setupImageWidget(node, config, isMaskOverride = false) {
-    const widget = findNodeWidget(node, config.widgetName);
-    if (!widget) {
-        return;
-    }
-
-    widget.label = config.displayName;
-    widget.options ??= {};
-    widget.options.image_upload = true;
-
-    if (!widget.__mAI_MainInputV02_imageChoicesRefreshed) {
-        widget.__mAI_MainInputV02_imageChoicesRefreshed = true;
-        refreshImageChoices(widget, isMaskOverride);
-    }
-}
 
 
 function applySizePreset(sizePresetWidget, widthWidget, heightWidget, presetName) {
@@ -365,8 +282,6 @@ function generateApiSchema(node) {
             width: findWidgetVal("width") ?? 1024,
             height: findWidgetVal("height") ?? 1024,
             User_prompt: findWidgetVal("User_prompt") ?? "",
-            image: findWidgetVal("image") ?? "none",
-            Mask_override_image: findWidgetVal("Mask_override_image") ?? "none",
             fields_config: parsedFields
         },
         class_type: node.comfyClass || "mAI_MainInputV02",
@@ -605,31 +520,6 @@ export function nextFieldId(fields) {
 }
 
 
-async function refreshImageChoices(widget, isMaskOverride = false) {
-    try {
-        const response = await api.fetchApi("/object_info/LoadImage");
-        const objectInfo = await response.json();
-        let values = objectInfo?.LoadImage?.input?.required?.image?.[0] ?? [];
-        if (isMaskOverride) {
-            values = ["none", ...values.filter(v => v !== "none")];
-        }
-        widget.options ??= {};
-        widget.options.values = withCurrentValue(values, widget.value);
-        markCanvasDirty();
-    } catch (error) {
-        warn("Could not refresh ComfyUI input image list.", error);
-    }
-}
-
-
-function withCurrentValue(values, currentValue) {
-    const normalizedValues = Array.isArray(values) ? values : [];
-    if (currentValue && !normalizedValues.includes(currentValue)) {
-        return [currentValue, ...normalizedValues];
-    }
-
-    return normalizedValues;
-}
 
 
 export function removeField(node, fieldId) {

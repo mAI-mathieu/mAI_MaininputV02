@@ -63,10 +63,6 @@ export function readFieldsFromConfig(node) {
     try {
         return parseFieldsConfig(value);
     } catch (error) {
-        const recovered = recoverFieldsConfigFromMaskWidget(node, widget, value);
-        if (recovered) {
-            return recovered;
-        }
         throw error;
     }
 }
@@ -99,51 +95,10 @@ export function getFieldState(node) {
 }
 
 
-function recoverFieldsConfigFromMaskWidget(node, configWidget, currentConfigValue) {
-    // This only exists to repair workflows saved during the widget-order bug.
-    const maskWidget = findNodeWidget(node, "Mask_override_image");
-    if (!maskWidget) {
-        return null;
-    }
-
-    const maskValue = widgetValueAsString(maskWidget, "");
-    if (!looksLikeFieldsConfig(maskValue)) {
-        return null;
-    }
-
-    let fields;
-    try {
-        fields = parseFieldsConfig(maskValue);
-    } catch {
-        return null;
-    }
-
-    configWidget.value = JSON.stringify(serializeFields(fields), null, 2);
-    maskWidget.value = normalizeRecoveredMaskValue(currentConfigValue);
-    markCanvasDirty();
-    warn("Recovered fields_config from a saved widget-order mismatch.");
-    return fields;
-}
-
-
 function widgetValueAsString(widget, fallback) {
     return typeof widget.value === "string" ? widget.value : String(widget.value ?? fallback);
 }
 
-
-function looksLikeFieldsConfig(value) {
-    const text = value.trim();
-    return text.startsWith("[") && text.endsWith("]");
-}
-
-
-function normalizeRecoveredMaskValue(value) {
-    const text = String(value ?? "").trim();
-    if (!text || looksLikeFieldsConfig(text)) {
-        return "none";
-    }
-    return text;
-}
 
 
 export function scheduleRebuild(node, rebuildFromConfig) {
