@@ -15,6 +15,42 @@ from ..utils.image_loader import (
 )
 
 
+def get_aspect_ratio_string(width, height):
+    import math
+    w, h = int(width), int(height)
+    if w == 0 or h == 0:
+        return "0:0"
+    
+    ratio = w / h
+    standard_ratios = {
+        "1:1": 1.0,
+        "4:3": 4.0/3.0,
+        "3:2": 3.0/2.0,
+        "16:9": 16.0/9.0,
+        "21:9": 21.0/9.0,
+        "3:4": 3.0/4.0,
+        "5:8": 5.0/8.0,
+        "9:16": 9.0/16.0,
+        "9:21": 9.0/21.0
+    }
+    
+    best_match = None
+    min_diff = 0.1  # Tolerance to catch SDXL approximations (e.g. 1344x768 is 1.75, matches 16:9's 1.77)
+    
+    for name, val in standard_ratios.items():
+        diff = abs(ratio - val)
+        if diff < min_diff:
+            min_diff = diff
+            best_match = name
+            
+    if best_match:
+        return best_match
+        
+    # Fallback for completely custom wild sizes (e.g., 500x150)
+    divisor = math.gcd(w, h)
+    return f"{w//divisor}:{h//divisor}"
+
+
 class mAI_MainInputV02:
     CATEGORY = "mAI/Input"
     RETURN_TYPES = (
@@ -23,6 +59,7 @@ class mAI_MainInputV02:
         "STRING",
         "IMAGE",
         "MASK",
+        "STRING",
         "*",
         "*",
         "*",
@@ -54,6 +91,7 @@ class mAI_MainInputV02:
         "User_prompt",
         "Main_image",
         "Main_mask",
+        "Aspect_ratio",
         "out_1",
         "out_2",
         "out_3",
@@ -89,7 +127,7 @@ class mAI_MainInputV02:
                 "width": ("INT", {"default": DEFAULT_WIDTH, "min": 1}),
                 "height": ("INT", {"default": DEFAULT_HEIGHT, "min": 1}),
                 "User_prompt": ("STRING", {"default": "", "multiline": True}),
-                "image": (list_input_images(), {"image_upload": True}),
+                "image": (["none"] + list_input_images(), {"default": "none", "image_upload": True}),
                 "Mask_override_image": (["none"] + list_input_images(), {"default": "none", "image_upload": True}),
                 "fields_config": (
                     "STRING",
@@ -113,14 +151,15 @@ class mAI_MainInputV02:
         m.update(str(fields_config).encode("utf-8"))
 
         # Main image file hashing
-        try:
-            if folder_paths.exists_annotated_filepath(image):
-                image_path = folder_paths.get_annotated_filepath(image)
-                with open(image_path, 'rb') as f:
-                    m.update(f.read())
-        except Exception:
-            # Fallback to hashing the filename itself if reading fails
-            m.update(str(image).encode("utf-8"))
+        if image and image != "none":
+            try:
+                if folder_paths.exists_annotated_filepath(image):
+                    image_path = folder_paths.get_annotated_filepath(image)
+                    with open(image_path, 'rb') as f:
+                        m.update(f.read())
+            except Exception:
+                # Fallback to hashing the filename itself if reading fails
+                m.update(str(image).encode("utf-8"))
 
         # Mask override image file hashing
         if Mask_override_image and Mask_override_image != "none":
@@ -150,11 +189,12 @@ class mAI_MainInputV02:
                 or filename.startswith("\\")
             )
 
-        if is_absolute_path(image):
-            return f"Absolute paths are not allowed for image: {image}"
+        if image and image != "none":
+            if is_absolute_path(image):
+                return f"Absolute paths are not allowed for image: {image}"
 
-        if not folder_paths.exists_annotated_filepath(image):
-            return f"Invalid image file: {image}"
+            if not folder_paths.exists_annotated_filepath(image):
+                return f"Invalid image file: {image}"
 
         if Mask_override_image and Mask_override_image != "none":
             if is_absolute_path(Mask_override_image):
@@ -175,7 +215,14 @@ class mAI_MainInputV02:
         fields_config=None,
     ):
         width, height = resolve_size(size_preset, width, height)
-        main_image_tensor, editor_mask_tensor, main_image_width, main_image_height = load_image_and_editor_mask(image)
+        
+        if image and image != "none":
+            main_image_tensor, editor_mask_tensor, main_image_width, main_image_height = load_image_and_editor_mask(image)
+        else:
+            import torch
+            main_image_tensor = torch.zeros((1, int(height), int(width), 3), dtype=torch.float32)
+            editor_mask_tensor = torch.zeros((1, int(height), int(width)), dtype=torch.float32)
+            main_image_width, main_image_height = int(width), int(height)
 
         if Mask_override_image and Mask_override_image != "none":
             override_mask_tensor = load_mask_override(
@@ -187,10 +234,12 @@ class mAI_MainInputV02:
         else:
             main_mask_tensor = editor_mask_tensor
 
+        aspect_ratio_str = get_aspect_ratio_string(width, height)
+
         fields = parse_fields_config(fields_config)
-        values = [int(width), int(height), User_prompt, main_image_tensor, main_mask_tensor]
+        values = [int(width), int(height), User_prompt, main_image_tensor, main_mask_tensor, aspect_ratio_str]
         values.extend(self._value_for_field(field) for field in fields)
-        values.extend([""] * (MAX_FIELDS + 5 - len(values)))
+        values.extend([""] * (MAX_FIELDS + 6 - len(values)))
         return tuple(values)
 
     @staticmethod

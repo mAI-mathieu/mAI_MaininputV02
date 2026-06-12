@@ -20,6 +20,7 @@ Fixed outputs always appear first in this order:
 3. `User_prompt`
 4. `Main_image`
 5. `Main_mask`
+6. `Aspect_ratio` (Mathematically calculated from width/height to snap to standard ratios like "16:9" or output custom integer ratios)
 
 Do not manually reorder native ComfyUI image widgets.
 Do not move fields_config.
@@ -139,15 +140,15 @@ The main image input widget is internally named `"image"` rather than `"Main_ima
 
 The UI displays the corresponding output socket as `"Main_image"`. In API workflows, callers must use `"image"` as the input key.
 
-The fixed `image` widget stores a ComfyUI input filename and uses ComfyUI's `image_upload` widget metadata so the frontend behaves like a regular image upload/select widget. Backend loading mirrors ComfyUI `LoadImage`: the node resolves the filename with `folder_paths.get_annotated_filepath`, loads the image tensor, and reads mask data from the selected image's alpha channel (which contains the painted mask).
+The fixed `image` widget stores an optional ComfyUI input filename (defaulting to `"none"`) and uses ComfyUI's `image_upload` widget metadata so the frontend behaves like a regular image upload/select widget. Backend loading mirrors ComfyUI `LoadImage`: if an image is provided, the node resolves the filename with `folder_paths.get_annotated_filepath`, loads the image tensor, and reads mask data from the selected image's alpha channel. If `"none"` is selected, it outputs empty black image and mask tensors matching the node's configured dimensions.
 
 The fixed `Mask_override_image` widget stores an optional filename string (or `"none"`). It is not an output, not a dynamic field, and not part of `fields_config`.
 
 The fixed `Main_mask` output uses this priority:
 
 1. If `Mask_override_image` is selected (and not `"none"`), load that file and extract the mask from it.
-2. If `Mask_override_image` is `"none"` (or empty), use the regular ComfyUI `LoadImage` mask associated with the main `image` (including alpha/mask data saved by ComfyUI's mask editor).
-3. If no mask exists, return an empty mask matching the main `image` dimensions.
+2. If `Mask_override_image` is `"none"` (or empty) and `image` is not `"none"`, use the regular ComfyUI `LoadImage` mask associated with the main `image` (including alpha/mask data saved by ComfyUI's mask editor).
+3. If no mask exists (e.g. `image` is `"none"` or has no alpha), return an empty mask matching the node's configured dimensions.
 
 ComfyUI's `/upload/mask` route saves a painted mask into the alpha channel of the referenced image. `Main_mask` follows the same convention as `LoadImage` by outputting inverted alpha (`1 - alpha`) when alpha is present. Only when no alpha/mask data exists does the node create an empty mask.
 

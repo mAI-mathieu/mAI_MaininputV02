@@ -2,7 +2,7 @@ export const EXTENSION_NAME = "mAI.MainInputV02";
 export const NODE_NAME = "mAI_MainInputV02";
 export const CONFIG_WIDGET = "fields_config";
 export const MAX_FIELDS = 24;
-export const FIXED_OUTPUT_COUNT = 5;
+export const FIXED_OUTPUT_COUNT = 6;
 
 export const DEFAULT_SIZE_PRESET = "custom";
 export const DEFAULT_WIDTH = 1024;
@@ -37,4 +37,5 @@ export const FIXED_OUTPUT_DESCRIPTORS = [
     { fieldId: "__fixed_User_prompt", name: "User_prompt", type: "STRING", fixed: true },
     { fieldId: "__fixed_Main_image", name: "Main_image", type: "IMAGE", fixed: true },
     { fieldId: "__fixed_Main_mask", name: "Main_mask", type: "MASK", fixed: true },
+    { fieldId: "__fixed_Aspect_ratio", name: "Aspect_ratio", type: "STRING", fixed: true },
 ];

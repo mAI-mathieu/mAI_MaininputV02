@@ -67,6 +67,50 @@ export function ensureControls(node) {
         return false;
     }
 
+    if (!node.__mAI_MainInputV02_maskUploadAdded) {
+        node.__mAI_MainInputV02_maskUploadAdded = true;
+        const maskWidget = findNodeWidget(node, "Mask_override_image");
+        
+        if (maskWidget) {
+            const btn = node.addWidget("button", "📁 Upload Mask Override", null, () => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = "image/png,image/jpeg,image/webp";
+                input.style.display = "none";
+                
+                input.onchange = async () => {
+                    if (!input.files || input.files.length === 0) return;
+                    
+                    const body = new FormData();
+                    body.append("image", input.files[0]);
+                    body.append("type", "input");
+                    
+                    try {
+                        const resp = await api.fetchApi("/upload/image", { method: "POST", body });
+                        if (resp.status === 200) {
+                            const data = await resp.json();
+                            // Ensure the new filename is in the dropdown options
+                            if (maskWidget.options && maskWidget.options.values) {
+                                if (!maskWidget.options.values.includes(data.name)) {
+                                    maskWidget.options.values.unshift(data.name);
+                                }
+                            }
+                            maskWidget.value = data.name;
+                            markCanvasDirty();
+                        }
+                    } catch (err) {
+                        console.error("Mask upload failed:", err);
+                    }
+                };
+                
+                document.body.appendChild(input);
+                input.click();
+                setTimeout(() => { if (input.parentNode) input.parentNode.removeChild(input); }, 1000);
+            });
+            btn.serialize = false;
+        }
+    }
+
     if (!node.__mAI_MainInputV02_domWidget) {
         addStylesheet();
 
@@ -222,7 +266,7 @@ function setupSizeWidgets(node) {
 
 
 function setupMainImageWidget(node) {
-    setupImageWidget(node, STATIC_IMAGE_WIDGETS[0]);
+    setupImageWidget(node, STATIC_IMAGE_WIDGETS[0], true);
 }
 
 
