@@ -356,7 +356,7 @@ export function renderDOMFields(node) {
     listDiv.innerHTML = "";
 
     const fields = getFieldState(node);
-    for (const field of fields) {
+    fields.forEach((field, index) => {
         const row = document.createElement("div");
         row.className = "mai-field-row";
 
@@ -418,14 +418,33 @@ export function renderDOMFields(node) {
             row.appendChild(valInput);
         }
 
+        const actionsDiv = document.createElement("div");
+        actionsDiv.className = "mai-field-actions";
+
+        const upBtn = document.createElement("button");
+        upBtn.className = "mai-action-btn";
+        upBtn.innerText = "▲";
+        upBtn.disabled = index === 0;
+        upBtn.addEventListener("click", () => moveField(node, index, -1));
+
+        const downBtn = document.createElement("button");
+        downBtn.className = "mai-action-btn";
+        downBtn.innerText = "▼";
+        downBtn.disabled = index === fields.length - 1;
+        downBtn.addEventListener("click", () => moveField(node, index, 1));
+
         const rmBtn = document.createElement("button");
-        rmBtn.className = "mai-field-remove";
+        rmBtn.className = "mai-action-btn remove";
         rmBtn.innerText = "✖";
         rmBtn.addEventListener("click", () => removeField(node, field.id));
-        row.appendChild(rmBtn);
+
+        actionsDiv.appendChild(upBtn);
+        actionsDiv.appendChild(downBtn);
+        actionsDiv.appendChild(rmBtn);
+        row.appendChild(actionsDiv);
 
         listDiv.appendChild(row);
-    }
+    });
 
     requestAnimationFrame(() => {
         resizeNode(node);
@@ -530,6 +549,21 @@ export function removeField(node, fieldId) {
     writeFieldsConfig(node, fields);
     renderDOMFields(node);
     resizeNode(node);
+}
+
+
+export function moveField(node, index, direction) {
+    const fields = getFieldState(node);
+    const newIndex = index + direction;
+    if (index < 0 || index >= fields.length || newIndex < 0 || newIndex >= fields.length) return;
+    
+    const temp = fields[index];
+    fields[index] = fields[newIndex];
+    fields[newIndex] = temp;
+    
+    writeFieldsConfig(node, fields);
+    normalizeOutputsAfterLoad(node, fields);
+    renderDOMFields(node);
 }
 
 

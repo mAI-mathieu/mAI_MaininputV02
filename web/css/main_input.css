@@ -42,7 +42,7 @@
 
 .mai-field-row {
     display: grid;
-    grid-template-columns: 120px 1fr 30px;
+    grid-template-columns: 120px 1fr auto;
     gap: 6px;
     align-items: center;
     background-color: var(--bg-color, #222);
@@ -81,21 +81,12 @@ input[type="checkbox"].mai-field-value {
     margin: 0;
 }
 
-.mai-field-remove {
-    background: transparent;
-    color: var(--error-text, #ff5555);
-    border: none;
-    cursor: pointer;
-    font-size: 14px;
-    padding: 0 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
+.mai-field-actions { display: flex; gap: 4px; align-items: center; }
 
-.mai-field-remove:hover {
-    color: #ff0000;
-}
+.mai-action-btn { background: #243447; border: 1px solid #4f657a; color: #eef4fb; border-radius: 4px; padding: 4px 8px; cursor: pointer; line-height: 1; font-size: 12px; }
+.mai-action-btn:disabled { opacity: 0.4; cursor: default; }
+.mai-action-btn:not(:disabled):hover { background: #2e4259; }
+.mai-action-btn.remove { color: #ff9d91; }
 
 .mai-add-bar {
     display: grid;
