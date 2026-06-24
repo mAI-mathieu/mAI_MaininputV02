@@ -7,6 +7,9 @@ export const FIXED_OUTPUT_COUNT = 4;
 export const DEFAULT_SIZE_PRESET = "custom";
 export const DEFAULT_WIDTH = 1024;
 export const DEFAULT_HEIGHT = 1024;
+export const DEFAULT_SIZE_MULTIPLIER = "x1";
+export const DEFAULT_DIVISIBLE_BY = 0;
+export const SIZE_MULTIPLIER_OPTIONS = ["x1", "x2", "x3", "x4"];
 
 export const SIZE_PRESETS = {
     custom: null,

@@ -1,7 +1,15 @@
 import json
 import unittest
 
-from utils.field_config import DEFAULT_FIELDS_CONFIG, MAX_FIELDS, parse_fields_config, resolve_size
+from utils.field_config import (
+    DEFAULT_FIELDS_CONFIG,
+    MAX_FIELDS,
+    parse_fields_config,
+    parse_size_multiplier,
+    resolve_final_size,
+    resolve_size,
+    round_to_nearest_multiple,
+)
 
 
 class FieldConfigTests(unittest.TestCase):
@@ -99,6 +107,36 @@ class FieldConfigTests(unittest.TestCase):
 
     def test_resolve_size_custom_uses_supplied_dimensions(self):
         self.assertEqual(resolve_size("custom", 640, 480), (640, 480))
+
+    def test_parse_size_multiplier_supports_options_and_falls_back_safely(self):
+        self.assertEqual(parse_size_multiplier("x1"), 1)
+        self.assertEqual(parse_size_multiplier("x2"), 2)
+        self.assertEqual(parse_size_multiplier("x3"), 3)
+        self.assertEqual(parse_size_multiplier("x4"), 4)
+        self.assertEqual(parse_size_multiplier("invalid"), 1)
+
+    def test_round_to_nearest_multiple_disabled_values_do_nothing(self):
+        self.assertEqual(round_to_nearest_multiple(1510, 0), 1510)
+        self.assertEqual(round_to_nearest_multiple(1510, 1), 1510)
+
+    def test_round_to_nearest_multiple_uses_higher_value_for_ties(self):
+        self.assertEqual(round_to_nearest_multiple(96, 64), 128)
+
+    def test_round_to_nearest_multiple_never_returns_below_divisor(self):
+        self.assertEqual(round_to_nearest_multiple(1, 64), 64)
+        self.assertEqual(round_to_nearest_multiple(31, 64), 64)
+
+    def test_resolve_final_size_rounds_after_multiplying(self):
+        self.assertEqual(
+            resolve_final_size("custom", 1000, 755, "x2", 64),
+            (1984, 1536),
+        )
+
+    def test_resolve_final_size_uses_preset_before_multiplying(self):
+        self.assertEqual(
+            resolve_final_size("3:4 portrait 896x1152", 1, 1, "x3", 0),
+            (2688, 3456),
+        )
 
 
 if __name__ == "__main__":

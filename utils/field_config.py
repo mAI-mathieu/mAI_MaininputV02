@@ -5,6 +5,8 @@ MAX_FIELDS = 24
 DEFAULT_SIZE_PRESET = "custom"
 DEFAULT_WIDTH = 1024
 DEFAULT_HEIGHT = 1024
+DEFAULT_SIZE_MULTIPLIER = "x1"
+DEFAULT_DIVISIBLE_BY = 0
 
 SIZE_PRESETS = {
     "custom": None,
@@ -20,6 +22,15 @@ SIZE_PRESETS = {
 }
 
 SIZE_PRESET_NAMES = list(SIZE_PRESETS.keys())
+
+SIZE_MULTIPLIERS = {
+    "x1": 1,
+    "x2": 2,
+    "x3": 3,
+    "x4": 4,
+}
+
+SIZE_MULTIPLIER_OPTIONS = list(SIZE_MULTIPLIERS.keys())
 
 SUPPORTED_FIELD_TYPES = ("STRING", "DROPDOWN", "INT", "FLOAT", "BOOLEAN")
 
@@ -65,6 +76,55 @@ def resolve_size(size_preset, width, height):
         return preset["width"], preset["height"]
 
     return int(width), int(height)
+
+
+def parse_size_multiplier(size_multiplier):
+    """Return a supported integer multiplier, falling back to x1."""
+    normalized = str(size_multiplier or DEFAULT_SIZE_MULTIPLIER).strip().lower()
+    return SIZE_MULTIPLIERS.get(normalized, SIZE_MULTIPLIERS[DEFAULT_SIZE_MULTIPLIER])
+
+
+def round_to_nearest_multiple(value, divisor):
+    """Round to the closest positive multiple, choosing the higher value on ties."""
+    value = max(1, int(value))
+
+    try:
+        divisor = int(divisor or 0)
+    except (TypeError, ValueError):
+        return value
+
+    if divisor < 2:
+        return value
+
+    lower = (value // divisor) * divisor
+    upper = lower + divisor
+
+    if lower < divisor:
+        return divisor
+
+    if value - lower < upper - value:
+        return lower
+
+    return upper
+
+
+def resolve_final_size(
+    size_preset,
+    width,
+    height,
+    size_multiplier=DEFAULT_SIZE_MULTIPLIER,
+    divisible_by=DEFAULT_DIVISIBLE_BY,
+):
+    base_width, base_height = resolve_size(size_preset, width, height)
+    multiplier = parse_size_multiplier(size_multiplier)
+
+    multiplied_width = max(1, int(base_width)) * multiplier
+    multiplied_height = max(1, int(base_height)) * multiplier
+
+    return (
+        round_to_nearest_multiple(multiplied_width, divisible_by),
+        round_to_nearest_multiple(multiplied_height, divisible_by),
+    )
 
 
 def _validate_field(item, index):

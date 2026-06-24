@@ -1,12 +1,15 @@
 from ..utils.field_config import (
+    DEFAULT_DIVISIBLE_BY,
     DEFAULT_FIELDS_CONFIG_JSON,
     DEFAULT_HEIGHT,
+    DEFAULT_SIZE_MULTIPLIER,
     DEFAULT_SIZE_PRESET,
     DEFAULT_WIDTH,
     MAX_FIELDS,
+    SIZE_MULTIPLIER_OPTIONS,
     SIZE_PRESET_NAMES,
     parse_fields_config,
-    resolve_size,
+    resolve_final_size,
 )
 
 
@@ -53,6 +56,7 @@ class mAI_MainInputV02:
         "INT",
         "STRING",
 
+        "*",
         "*",
         "*",
         "*",
@@ -125,10 +129,30 @@ class mAI_MainInputV02:
                     {"default": DEFAULT_FIELDS_CONFIG_JSON, "multiline": True},
                 ),
             },
+            "optional": {
+                "size_multiplier": (
+                    SIZE_MULTIPLIER_OPTIONS,
+                    {"default": DEFAULT_SIZE_MULTIPLIER},
+                ),
+                "divisible_by": (
+                    "INT",
+                    {"default": DEFAULT_DIVISIBLE_BY, "min": 0},
+                ),
+            },
         }
 
     @classmethod
-    def IS_CHANGED(cls, size_preset=DEFAULT_SIZE_PRESET, width=DEFAULT_WIDTH, height=DEFAULT_HEIGHT, User_prompt="", fields_config=None, **kwargs):
+    def IS_CHANGED(
+        cls,
+        size_preset=DEFAULT_SIZE_PRESET,
+        width=DEFAULT_WIDTH,
+        height=DEFAULT_HEIGHT,
+        User_prompt="",
+        fields_config=None,
+        size_multiplier=DEFAULT_SIZE_MULTIPLIER,
+        divisible_by=DEFAULT_DIVISIBLE_BY,
+        **kwargs,
+    ):
         import hashlib
 
         m = hashlib.sha256()
@@ -139,6 +163,8 @@ class mAI_MainInputV02:
         m.update(str(height).encode("utf-8"))
         m.update(str(User_prompt).encode("utf-8"))
         m.update(str(fields_config).encode("utf-8"))
+        m.update(str(size_multiplier).encode("utf-8"))
+        m.update(str(divisible_by).encode("utf-8"))
 
         return m.digest().hex()
 
@@ -150,8 +176,16 @@ class mAI_MainInputV02:
         height=DEFAULT_HEIGHT,
         User_prompt="",
         fields_config=None,
+        size_multiplier=DEFAULT_SIZE_MULTIPLIER,
+        divisible_by=DEFAULT_DIVISIBLE_BY,
     ):
-        width, height = resolve_size(size_preset, width, height)
+        width, height = resolve_final_size(
+            size_preset,
+            width,
+            height,
+            size_multiplier,
+            divisible_by,
+        )
         
         aspect_ratio_str = get_aspect_ratio_string(width, height)
 

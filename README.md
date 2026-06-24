@@ -1,52 +1,62 @@
 # mAI MainInputV02
 
-Standalone ComfyUI custom node pack for building a visual main input node with
-dynamic outputs.
+Standalone ComfyUI custom node pack containing:
 
-Users add output fields with buttons inside the node. The raw JSON config is
-kept in a hidden `fields_config` widget so workflows can save, reload, and
-export to API format without requiring manual JSON editing.
+- `mAI MainInputV02`: scalar size, prompt, and dynamic configuration outputs.
+- `mAI ImageLoader`: image and mask loading.
 
-The node also includes fixed size controls and outputs:
-
-- `size_preset`
-- `width`
-- `height`
-- `User_prompt`
-- `Main_image`
-- `Mask_override_image`
-
-## Node
-
-- Display name: `mAI MainInputV02`
-- Internal name: `mAI_MainInputV02`
-- Category: `mAI/Input`
+The main input node stores its dynamic field definitions in a hidden
+`fields_config` widget so workflows can save, reload, and export to API format
+without manual JSON editing.
 
 ## Installation
 
-Copy this folder into your ComfyUI `custom_nodes` folder and restart ComfyUI.
-The node should appear under `mAI/Input`.
+Copy this folder into the ComfyUI `custom_nodes` folder and restart ComfyUI.
+The nodes appear under `mAI/Input`.
 
 No install script or heavy dependencies are required.
 
-## How It Works
+## mAI MainInputV02
 
-The node has no connectable input sockets on the left side. It always exposes
-fixed `Width`, `Height`, `User_prompt`, `Main_image`, and `Main_mask` outputs
-first, then dynamic output sockets on the right side.
+- Internal name: `mAI_MainInputV02`
+- Category: `mAI/Input`
+- No connectable input sockets
+- Four fixed outputs: `Width`, `Height`, `User_prompt`, and `Aspect_ratio`
+- Up to 24 dynamic scalar outputs
 
-Use `size_preset` to set common dimensions. Selecting a non-custom preset
-updates `width` and `height`. Editing `width` or `height` manually switches the
-preset back to `custom`.
+### Fixed widgets
 
-`User_prompt` is a mandatory multiline text widget. It always outputs `STRING`
-and is not part of the dynamic `fields_config`.
+- `size_preset`: chooses a preset or `custom`.
+- `width`: custom base width.
+- `height`: custom base height.
+- `User_prompt`: multiline string.
+- `size_multiplier`: `x1`, `x2`, `x3`, or `x4`; default `x1`.
+- `divisible_by`: integer rounding divisor; default `0`, minimum `0`.
 
-`image` (labeled as `Main_image`) is a fixed image upload/select widget. It stores a ComfyUI input
-filename and outputs a real `IMAGE` tensor, similar to the regular ComfyUI Load
-Image node. Under the hood, this widget is named `"image"` for compatibility with ComfyUI's mask editor.
+Existing workflows that do not contain the two new widgets use `x1` and `0`,
+so their resulting dimensions remain unchanged.
 
-`Mask_override_image` is a regular image select/upload widget that works similarly to the main image widget. When selected, the backend extracts the mask from this image (using the alpha channel if it exists, otherwise falling back to luminance), overriding the regular mask editor. It is not an output, not a dynamic field, and not stored in `fields_config`.
+### Size resolution order
+
+Final dimensions are calculated in this order:
+
+1. Resolve the base dimensions from `size_preset`, `width`, and `height`.
+2. Multiply both dimensions by `size_multiplier`.
+3. If `divisible_by` is `2` or higher, round each dimension to the closest
+   positive multiple of that value.
+4. Return the adjusted dimensions from `Width` and `Height`.
+
+`divisible_by` values `0` and `1` disable rounding. If a dimension is exactly
+halfway between two multiples, the higher multiple is selected.
+
+Examples:
+
+- Custom `1024x768`, `x2`, divisor `0` becomes `2048x1536`.
+- Custom `1000x755`, `x2`, divisor `64` becomes `1984x1536`.
+- Preset `3:4 portrait 896x1152`, `x3`, divisor `0` becomes `2688x3456`.
+
+Selecting a non-custom preset updates the visible `width` and `height`.
+Editing either dimension manually switches the preset back to `custom`.
 
 Available presets:
 
@@ -61,170 +71,94 @@ Available presets:
 - `16:9 landscape 1344x768`
 - `21:9 landscape 1536x640`
 
-Use the node buttons to add dynamic scalar fields:
+### Dynamic fields
 
-- `+ String`
-- `+ Dropdown`
-- `+ Int`
-- `+ Float`
-- `+ Boolean`
+Use the controls inside the node to add:
 
-Each added field creates visible controls for the value, a matching output
-socket, and an internal serialized field definition in `fields_config`.
+- `STRING`
+- `INT`
+- `FLOAT`
+- `BOOLEAN`
 
-Dynamic outputs always appear after the fixed `Width`, `Height`, `User_prompt`,
-`Main_image`, and `Main_mask` outputs.
+Each field creates a visible value control, a matching output socket, and a
+serialized entry in `fields_config`. Dynamic outputs always follow the four
+fixed outputs. Dynamic `IMAGE` and `MASK` fields are not supported; use
+`mAI ImageLoader` for those values.
 
-## Supported Dynamic Field Types
+## mAI ImageLoader
 
-- `STRING`: outputs `STRING`
-- `DROPDOWN`: outputs `STRING`
-- `INT`: outputs `INT`
-- `FLOAT`: outputs `FLOAT`
-- `BOOLEAN`: outputs `BOOLEAN`
+Image and mask loading remains isolated in `mAI_ImageLoader`. It exposes fixed
+`IMAGE` and `MASK` outputs, supports the regular ComfyUI mask editor, and
+supports a separate `Mask_override_image`. The size-control changes in
+`mAI_MainInputV02` do not alter image or mask behavior.
 
-> [!NOTE]
-> Dynamic `IMAGE` and `MASK` fields are not supported. Use the fixed `Main_image` and `Main_mask` outputs instead. If an old workflow or API payload attempts to load a dynamic `IMAGE` or `MASK` in `fields_config`, the backend raises a descriptive ValueError instructing you to migrate to the fixed `Main_image`/`Main_mask` outputs.
+## API export
 
-## Main Image And Mask
-
-The fixed `image` widget (internally named `"image"` for mask editor compatibility) stores a ComfyUI input filename and outputs a real ComfyUI `IMAGE` tensor (via the `Main_image` output). Its mask behavior mirrors ComfyUI's Load Image node: when a mask is painted with the normal ComfyUI mask editor, that mask is saved into the selected image's alpha channel and loaded back from there. The node implements custom backend input validation to seamlessly accept temporary `clipspace/` file paths generated by the mask editor, preventing ComfyUI's default "Value not in list" error while securely rejecting arbitrary absolute paths.
-
-The fixed `Main_mask` output is produced with this priority:
-
-1. If `Mask_override_image` is selected (and not `"none"`), load that image and extract the mask from it. If the image has an alpha channel, that channel is used. Otherwise, the luminance is used.
-2. If `Mask_override_image` is `"none"` (or empty), use the regular Load Image mask data associated with the main `image` (painted with the mask editor).
-3. If no mask is found, output an empty mask matching the main image's dimensions.
-
-`Mask_override_image` is a standard ComfyUI image selection widget and expects a valid input filename. If the override mask dimensions differ from `Main_image`, the mask is resized to match `Main_image` dimensions. Absolute local paths are rejected.
-
-## API Export Note
-
-ComfyUI requires static class-level return definitions, so the Python backend
-declares fixed `INT` outputs for `Width` and `Height`, fixed `STRING`,
-`IMAGE`, and `MASK` outputs for `User_prompt`, `Main_image`, and `Main_mask`,
-followed by 24 wildcard fallback outputs:
+The Python backend declares:
 
 ```text
-Width, Height, User_prompt, Main_image, Main_mask, out_1 ... out_24
+Width, Height, User_prompt, Aspect_ratio, out_1 ... out_24
 ```
 
-The frontend replaces the visible outputs with the field names and types stored
-in `fields_config`, while keeping `Width`, `Height`, `User_prompt`,
-`Main_image`, and `Main_mask` fixed at the front. API exports should include
-`size_preset`, `width`, `height`, `User_prompt`, `image`,
-`Mask_override_image`, and `fields_config`. If `size_preset` is `custom`,
-API execution uses the supplied `width` and `height`. Non-custom presets
-resolve to their mapped dimensions. API callers can set `User_prompt`,
-`image` (under the hood name for the main image widget), and `Mask_override_image` directly as normal node inputs.
+The frontend replaces the wildcard output names and types with the dynamic
+fields stored in `fields_config`.
 
-Fixed image/mask API example:
+API inputs for `mAI_MainInputV02` are:
+
+- `size_preset`
+- `width`
+- `height`
+- `User_prompt`
+- `fields_config`
+- `size_multiplier`
+- `divisible_by`
+
+For compatibility, API clients may omit `size_multiplier` and `divisible_by`;
+the backend defaults to `x1` and `0`.
+
+Example:
 
 ```json
 {
-  "image": "input_image.png",
-  "Mask_override_image": "input_mask.png"
+  "size_preset": "custom",
+  "width": 1000,
+  "height": 755,
+  "User_prompt": "a cinematic portrait",
+  "fields_config": "[]",
+  "size_multiplier": "x2",
+  "divisible_by": 64
 }
 ```
 
-When `Mask_override_image` is empty or `"none"`, the `Main_mask` output uses mask editor
-data from the main `image` when available, otherwise it returns an empty mask.
+This returns `Width=1984` and `Height=1536`.
 
-`Mask_override_image` must be a ComfyUI input filename. Absolute local paths
-such as `C:\temp\some_mask.png` are rejected by default for safety. Upload or
-copy that file into `ComfyUI/input` first, then use the resulting filename.
+## Testing
 
+Run the pure Python suite from this repository:
 
-Example internal config:
-
-```json
-[
-  {
-    "id": "field_1",
-    "name": "positive_prompt",
-    "type": "STRING",
-    "value": "a cinematic photo"
-  },
-  {
-    "id": "field_2",
-    "name": "ratio",
-    "type": "DROPDOWN",
-    "options": ["1:1", "16:9", "9:16"],
-    "value": "1:1"
-  }
-]
+```powershell
+python -m unittest discover -s tests -v
 ```
 
-Users should not need to edit this JSON directly.
+ComfyUI smoke test:
 
-## Known Limitations
+1. Restart ComfyUI and add `mAI MainInputV02`.
+2. Confirm `size_multiplier` offers `x1` through `x4`.
+3. Confirm `divisible_by` defaults to `0` and does not accept negative values.
+4. Set custom `1000x755`, `x2`, and `64`; run the workflow and confirm
+   `Width=1984` and `Height=1536`.
+5. Select a preset and confirm the multiplier applies to the preset dimensions.
+6. Save and reload a workflow; confirm static widgets, dynamic fields, output
+   sockets, and links are preserved.
+7. Load an older workflow and confirm it behaves as `x1` with divisor `0`.
+8. Smoke-test `mAI ImageLoader` separately to confirm image and mask behavior
+   remains unchanged.
 
-- Maximum of 24 fields.
-- `Width`, `Height`, `User_prompt`, `Main_image`, and `Main_mask` are fixed
-  outputs and cannot be removed or renamed.
-- Removing a field removes its matching output socket and can remove links from
+## Known limitations
+
+- Maximum of 24 dynamic fields.
+- Fixed outputs cannot be removed or renamed.
+- Removing a dynamic field removes its output socket and may remove links from
   that socket.
-- Changing field names updates output socket names, but existing downstream
-  nodes may still need a quick visual check after complex workflow edits.
-
-## Troubleshooting
-
-If fields do not restore after reload, open the browser console and look for
-warnings from `mAI.MainInputV02`.
-
-Common causes:
-
-- `fields_config` is missing from an API/workflow export.
-- `fields_config` contains invalid JSON.
-- A field is missing `id`, `name`, `type`, or `value`.
-- `Main_image` is empty or points to a missing file.
-- `Mask_override_image` points to a missing file, invalid file, or absolute
-  local path instead of a ComfyUI input filename.
-- More than 24 fields are defined.
-
-## Test Checklist
-
-1. Restart ComfyUI.
-2. Add `mAI MainInputV02`.
-3. Confirm `size_preset`, `width`, `height`, `User_prompt`, `Main_image`,
-   and `Mask_override_image` are visible.
-4. Confirm no left-side input sockets.
-5. Confirm the fixed outputs are `Width`, `Height`, `User_prompt`,
-   `Main_image`, and `Main_mask`.
-6. Select `1:1 square 1024x1024` and confirm width/height become `1024`.
-7. Select `16:9 landscape 1344x768` and confirm width becomes `1344` and
-   height becomes `768`.
-8. Manually edit `width` and confirm `size_preset` becomes `custom`.
-9. Type text in `User_prompt` and connect it to Display Any.
-10. Select/upload `Main_image`, connect it to Preview Image, and confirm the
-    image passes through.
-11. Open the mask editor from `Main_image` if available, paint a mask, and keep
-    `Mask_override_image` set to `"none"`.
-12. Connect `Main_mask` to a mask consumer and confirm the editor mask is used.
-13. Select/upload an image in `Mask_override_image`.
-14. Confirm `Main_mask` now uses the `Mask_override_image` mask data.
-15. Select `"none"` in `Mask_override_image` and confirm `Main_mask` returns to the
-    `Main_image` mask data.
-16. Test no editor mask and empty/`"none"` `Mask_override_image`, and confirm an
-    empty mask output works.
-17. Confirm there is no visible JSON editing workflow.
-18. Click `+ String`.
-19. Confirm a string field appears and a `STRING` output appears after all
-    fixed outputs.
-20. Rename the field.
-21. Confirm the output socket name updates.
-22. Click `+ Dropdown`.
-23. Add options: `square, portrait, landscape`.
-24. Confirm the dropdown works and outputs `STRING`.
-25. Click `+ Int`, `+ Float`, and `+ Boolean`.
-26. Confirm each creates the correct output socket type after the fixed outputs.
-27. Remove one field.
-30. Confirm its output disappears and fixed outputs remain.
-31. Save the workflow.
-32. Reload the browser.
-33. Confirm all fixed and dynamic outputs are restored.
-34. Confirm `Main_image` and `Mask_override_image` selections persist.
-35. Export workflow/API format.
-36. Confirm `size_preset`, `width`, `height`, `User_prompt`, `Main_image`,
-    `Mask_override_image`, and `fields_config` are present.
-37. Run the workflow and confirm scalar outputs work correctly.
+- Very large multipliers can produce dimensions that require substantial VRAM
+  in downstream nodes.

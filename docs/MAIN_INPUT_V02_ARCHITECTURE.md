@@ -13,6 +13,8 @@ The node also has fixed size state:
 - `size_preset`: serialized dropdown widget
 - `width`: serialized `INT` widget and fixed `INT` output
 - `height`: serialized `INT` widget and fixed `INT` output
+- `size_multiplier`: serialized `x1` to `x4` dropdown widget
+- `divisible_by`: serialized non-negative `INT` widget
 - `User_prompt`: serialized multiline `STRING` widget and fixed `STRING` output
 
 Fixed outputs always appear first in this order:
@@ -40,14 +42,20 @@ widgets, so they do not become independent serialized state. Note: The live API
 schema preview and copy functions have been removed from the UI to save space, 
 but API export behavior still relies entirely on `fields_config`.
 
-`size_preset`, `width`, `height`, and `User_prompt` are ordinary serialized
-widgets. API workflows can set them directly. When `size_preset` is `custom`,
-the supplied `width` and `height` values are used. Non-custom presets resolve
-to their mapped dimensions in the backend.
+`size_preset`, `width`, `height`, `User_prompt`, `size_multiplier`, and
+`divisible_by` are ordinary serialized widgets. API workflows can set them
+directly. When `size_preset` is `custom`, the supplied `width` and `height`
+values are used. Non-custom presets resolve to their mapped dimensions in the
+backend.
 
-The backend `INPUT_TYPES` order is `size_preset`, `width`, `height`,
-`User_prompt`, then `fields_config`. The frontend DOMWidget is added only
-after those fixed backend widgets exist.
+For workflow compatibility, the backend `INPUT_TYPES` keeps the original
+serialized widgets in `required`, in their original order: `size_preset`,
+`width`, `height`, `User_prompt`, and `fields_config`. The new
+`size_multiplier` and `divisible_by` primitive widgets are appended in
+`optional`. Older positional `widgets_values` therefore continue to map to
+their original widgets, while the new widgets retain their defaults (`x1` and
+`0`). Older API prompts may omit the new values and use the same defaults. The
+frontend DOMWidget is added only after all fixed backend widgets exist.
 
 `User_prompt` is not stored in `fields_config`.
 
@@ -103,6 +111,29 @@ During the output synchronization phase, the frontend must explicitly override B
 When links move, `app.graph.links[linkId].origin_slot` is updated to the new
 output index.
 
+## Size Resolution
+
+Pure Python size logic lives in `utils/field_config.py`; the node class only
+calls `resolve_final_size`.
+
+Resolution is deterministic:
+
+1. `resolve_size` chooses preset dimensions or custom `width` and `height`.
+2. `parse_size_multiplier` maps `x1`, `x2`, `x3`, or `x4` to an integer. An
+   invalid value safely falls back to `x1`.
+3. Both positive base dimensions are multiplied.
+4. `round_to_nearest_multiple` adjusts each multiplied dimension when
+   `divisible_by >= 2`. Values `0` and `1` leave dimensions unchanged.
+
+Nearest-multiple rounding uses integer distances. Exact ties choose the higher
+multiple, and active rounding never returns a value smaller than the divisor.
+The final adjusted dimensions feed the fixed `Width` and `Height` outputs and
+the calculated `Aspect_ratio`.
+
+Frontend preset callbacks continue to update only the visible base `width` and
+`height`. Multiplier and divisor behavior is authoritative in the backend, so
+API execution and normal workflow execution use identical logic.
+
 ## Output Lifecycle
 
 Adding a field appends one matching output socket after the fixed outputs.
@@ -120,5 +151,6 @@ The frontend displays only the fixed outputs plus dynamic outputs defined by `fi
 
 ### IS_CHANGED
 The node implements a custom `@classmethod IS_CHANGED` to ensure ComfyUI correctly detects updates and refreshes outputs. It hashes:
-1. The state of all static widgets (`size_preset`, `width`, `height`, `User_prompt`).
+1. The state of all static widgets (`size_preset`, `width`, `height`,
+   `User_prompt`, `size_multiplier`, `divisible_by`).
 2. The dynamic fields JSON configuration (`fields_config`).

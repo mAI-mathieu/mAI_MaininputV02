@@ -45,6 +45,8 @@ const REQUIRED_FIXED_WIDGET_NAMES = [
     "height",
     "User_prompt",
     CONFIG_WIDGET,
+    "size_multiplier",
+    "divisible_by",
 ];
 
 

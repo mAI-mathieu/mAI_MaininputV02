@@ -1,12 +1,14 @@
 import importlib.util
+import json
 import pathlib
 import sys
 import unittest
 from unittest import mock
 
-# Mock the folder_paths module for unit tests running outside ComfyUI
-mock_folder_paths = mock.MagicMock()
-sys.modules['folder_paths'] = mock_folder_paths
+
+# The package also registers mAI_ImageLoader, whose imports expect ComfyUI's
+# folder_paths module even though these tests exercise only mAI_MainInputV02.
+sys.modules["folder_paths"] = mock.MagicMock()
 
 
 def load_node_package():
@@ -23,44 +25,59 @@ def load_node_package():
 
 
 class MainInputV02Tests(unittest.TestCase):
-    def node_class_and_module(self):
+    def node_class(self):
         module = load_node_package()
-        node_class = module.NODE_CLASS_MAPPINGS["mAI_MainInputV02"]
-        node_module = sys.modules[node_class.__module__]
-        return node_class, node_module
+        return module.NODE_CLASS_MAPPINGS["mAI_MainInputV02"]
 
-    def test_input_types_are_widgets_only(self):
-        node_class, _node_module = self.node_class_and_module()
+    def test_input_types_include_compatible_size_defaults(self):
+        node_class = self.node_class()
 
         input_types = node_class.INPUT_TYPES()
+        required = input_types["required"]
+        optional = input_types["optional"]
 
-        self.assertNotIn("optional", input_types)
         self.assertEqual(
-            set(input_types["required"]),
-            {
+            list(required),
+            [
                 "size_preset",
                 "width",
                 "height",
                 "User_prompt",
-                "image",
-                "Mask_override_image",
                 "fields_config",
-            },
+            ],
         )
-        self.assertEqual(len(node_class.RETURN_TYPES), 29)
-        self.assertEqual(len(node_class.RETURN_NAMES), 29)
-        self.assertEqual(node_class.RETURN_TYPES[:5], ("INT", "INT", "STRING", "IMAGE", "MASK"))
+        self.assertEqual(list(optional), ["size_multiplier", "divisible_by"])
+        self.assertEqual(optional["size_multiplier"][0], ["x1", "x2", "x3", "x4"])
+        self.assertEqual(optional["size_multiplier"][1]["default"], "x1")
+        self.assertEqual(optional["divisible_by"][1], {"default": 0, "min": 0})
+
+    def test_output_count_and_fixed_outputs_remain_stable(self):
+        node_class = self.node_class()
+
+        self.assertEqual(len(node_class.RETURN_TYPES), 28)
+        self.assertEqual(len(node_class.RETURN_NAMES), 28)
         self.assertEqual(
-            node_class.RETURN_NAMES[:5],
-            ("width", "height", "User_prompt", "Main_image", "Main_mask"),
+            node_class.RETURN_NAMES[:4],
+            ("Width", "Height", "User_prompt", "Aspect_ratio"),
         )
+
+        fields = [
+            {
+                "id": f"field_{index}",
+                "name": f"value_{index}",
+                "type": "INT",
+                "value": index,
+            }
+            for index in range(24)
+        ]
+        result = node_class().execute(fields_config=json.dumps(fields))
+
+        self.assertEqual(len(result), 28)
+        self.assertEqual(result[:4], (1024, 1024, "", "1:1"))
+        self.assertEqual(result[4:], tuple(range(24)))
 
     def test_execute_returns_configured_values_and_safe_padding(self):
-        node_class, node_module = self.node_class_and_module()
-        node = node_class()
-        main_image = FakeImageTensor()
-        editor_mask = object()
-
+        node = self.node_class()()
         fields_config = """
         [
           {
@@ -71,226 +88,108 @@ class MainInputV02Tests(unittest.TestCase):
           },
           {
             "id": "field_2",
-            "name": "ratio",
-            "type": "DROPDOWN",
-            "options": ["square", "portrait", "landscape"],
-            "value": "portrait"
-          },
-          {
-            "id": "field_3",
             "name": "batch_size",
             "type": "INT",
             "value": 4
           },
           {
-            "id": "field_4",
+            "id": "field_3",
             "name": "strength",
             "type": "FLOAT",
             "value": 0.75
           },
           {
-            "id": "field_5",
+            "id": "field_4",
             "name": "enabled",
             "type": "BOOLEAN",
             "value": true
           }
         ]
         """
-        with mock.patch.object(
-            node_module,
-            "load_image_and_editor_mask",
-            return_value=(main_image, editor_mask, 64, 32),
-        ):
-            result = node.execute(
-                size_preset="custom",
-                width=1232,
-                height=768,
-                User_prompt="keep this prompt fixed",
-                image="input.png",
-                fields_config=fields_config,
-            )
 
-        self.assertEqual(len(result), 29)
+        result = node.execute(
+            size_preset="custom",
+            width=1024,
+            height=768,
+            User_prompt="keep this prompt fixed",
+            fields_config=fields_config,
+        )
+
+        self.assertEqual(len(result), 28)
         self.assertEqual(
-            result[:10],
+            result[:8],
             (
-                1232,
+                1024,
                 768,
                 "keep this prompt fixed",
-                main_image,
-                editor_mask,
+                "4:3",
                 "sunlit mountains",
-                "portrait",
                 4,
                 0.75,
                 True,
             ),
         )
-        self.assertEqual(result[10:], ("",) * 19)
+        self.assertEqual(result[8:], ("",) * 20)
 
-    def test_execute_non_custom_preset_controls_width_and_height(self):
-        node_class, node_module = self.node_class_and_module()
-        node = node_class()
-        main_image = FakeImageTensor()
-        editor_mask = object()
-
-        with mock.patch.object(
-            node_module,
-            "load_image_and_editor_mask",
-            return_value=(main_image, editor_mask, 64, 32),
-        ):
-            result = node.execute(
-                size_preset="16:9 landscape 1344x768",
-                width=1,
-                height=1,
-                User_prompt="api prompt",
-                image="input.png",
-                fields_config="[]",
-            )
-
-        self.assertEqual(len(result), 29)
-        self.assertEqual(result[:5], (1344, 768, "api prompt", main_image, editor_mask))
-        self.assertEqual(result[5:], ("",) * 24)
-
-    def test_execute_requires_main_image(self):
-        node_class, _node_module = self.node_class_and_module()
-        node = node_class()
-
-        with self.assertRaisesRegex(ValueError, "Main_image.*requires an image filename"):
-            node.execute(fields_config="[]")
-
-    def test_execute_mask_override_image_replaces_editor_mask(self):
-        node_class, node_module = self.node_class_and_module()
-        node = node_class()
-        main_image = FakeImageTensor()
-        editor_mask = object()
-        override_mask = object()
-
-        with mock.patch.object(
-            node_module,
-            "load_image_and_editor_mask",
-            return_value=(main_image, editor_mask, 64, 32),
-        ), mock.patch.object(
-            node_module,
-            "load_mask_override",
-            return_value=override_mask,
-        ) as load_override:
-            result = node.execute(
-                image="input.png",
-                Mask_override_image="input_mask.png",
-                fields_config="[]",
-            )
-
-        self.assertEqual(result[:5], (1024, 1024, "", main_image, override_mask))
-        load_override.assert_called_once_with(
-            "input_mask.png",
-            target_width=64,
-            target_height=32,
+    def test_x1_keeps_custom_size_unchanged(self):
+        result = self.node_class()().execute(
+            width=1000,
+            height=755,
+            size_multiplier="x1",
+            divisible_by=0,
+            fields_config="[]",
         )
 
-    def test_execute_image_field_requires_filename(self):
-        node_class, node_module = self.node_class_and_module()
-        node = node_class()
+        self.assertEqual(result[:2], (1000, 755))
 
-        fields_config = """
-        [
-          {
-            "id": "field_1",
-            "name": "reference_image",
-            "type": "IMAGE",
-            "value": ""
-          }
-        ]
-        """
+    def test_x2_x3_and_x4_multiply_custom_size(self):
+        node = self.node_class()()
 
-        with mock.patch.object(
-            node_module,
-            "load_image_and_editor_mask",
-            return_value=(FakeImageTensor(), object(), 64, 32),
+        for multiplier, expected in (
+            ("x2", (1280, 960)),
+            ("x3", (1920, 1440)),
+            ("x4", (2560, 1920)),
         ):
-            with self.assertRaisesRegex(ValueError, "dynamic IMAGE/MASK fields were removed and should be replaced by fixed Main_image/Main_mask"):
-                node.execute(image="input.png", fields_config=fields_config)
+            with self.subTest(multiplier=multiplier):
+                result = node.execute(
+                    width=640,
+                    height=480,
+                    size_multiplier=multiplier,
+                    fields_config="[]",
+                )
+                self.assertEqual(result[:2], expected)
 
-    def test_execute_mask_field_requires_filename(self):
-        node_class, node_module = self.node_class_and_module()
-        node = node_class()
+    def test_multiplier_applies_to_preset_size(self):
+        result = self.node_class()().execute(
+            size_preset="16:9 landscape 1344x768",
+            width=1,
+            height=1,
+            size_multiplier="x2",
+            fields_config="[]",
+        )
 
-        fields_config = """
-        [
-          {
-            "id": "field_1",
-            "name": "subject_mask",
-            "type": "MASK",
-            "value": ""
-          }
-        ]
-        """
+        self.assertEqual(result[:2], (2688, 1536))
 
-        with mock.patch.object(
-            node_module,
-            "load_image_and_editor_mask",
-            return_value=(FakeImageTensor(), object(), 64, 32),
-        ):
-            with self.assertRaisesRegex(ValueError, "dynamic IMAGE/MASK fields were removed and should be replaced by fixed Main_image/Main_mask"):
-                node.execute(image="input.png", fields_config=fields_config)
+    def test_divisible_rounding_applies_after_multiplier(self):
+        result = self.node_class()().execute(
+            width=1000,
+            height=755,
+            size_multiplier="x2",
+            divisible_by=64,
+            fields_config="[]",
+        )
 
-    def test_validate_inputs_returns_true_for_valid_annotated_paths(self):
-        node_class, _node_module = self.node_class_and_module()
+        self.assertEqual(result[:2], (1984, 1536))
 
-        import folder_paths
-        folder_paths.exists_annotated_filepath.return_value = True
-        result = node_class.VALIDATE_INPUTS(image="input.png", Mask_override_image="mask.png")
-        self.assertTrue(result)
+    def test_is_changed_includes_new_size_controls(self):
+        node_class = self.node_class()
 
-    def test_validate_inputs_rejects_absolute_paths(self):
-        node_class, _node_module = self.node_class_and_module()
+        baseline = node_class.IS_CHANGED(size_multiplier="x1", divisible_by=0)
+        multiplied = node_class.IS_CHANGED(size_multiplier="x2", divisible_by=0)
+        rounded = node_class.IS_CHANGED(size_multiplier="x1", divisible_by=64)
 
-        import folder_paths
-        folder_paths.exists_annotated_filepath.return_value = True
-
-        result = node_class.VALIDATE_INPUTS(image=r"C:\temp\input.png")
-        self.assertIsInstance(result, str)
-        self.assertIn("Absolute paths are not allowed", result)
-
-        result = node_class.VALIDATE_INPUTS(image="input.png", Mask_override_image=r"/tmp/mask.png")
-        self.assertIsInstance(result, str)
-        self.assertIn("Absolute paths are not allowed", result)
-
-    def test_validate_inputs_rejects_missing_files(self):
-        node_class, _node_module = self.node_class_and_module()
-
-        import folder_paths
-        folder_paths.exists_annotated_filepath.side_effect = lambda x: x == "input.png"
-        try:
-            result = node_class.VALIDATE_INPUTS(image="input.png", Mask_override_image="missing_mask.png")
-            self.assertIsInstance(result, str)
-            self.assertIn("Invalid mask override image file", result)
-        finally:
-            folder_paths.exists_annotated_filepath.side_effect = None
-
-    def test_is_changed_incorporates_file_contents_and_widget_states(self):
-        node_class, _node_module = self.node_class_and_module()
-
-        import folder_paths
-        folder_paths.exists_annotated_filepath.return_value = True
-        folder_paths.get_annotated_filepath.side_effect = lambda x: f"/fake/{x}"
-
-        try:
-            with mock.patch("builtins.open", mock.mock_open(read_data=b"file_bytes")):
-                hash1 = node_class.IS_CHANGED(image="input.png", Mask_override_image="mask.png", width=512)
-                hash2 = node_class.IS_CHANGED(image="input.png", Mask_override_image="mask.png", width=512)
-                hash3 = node_class.IS_CHANGED(image="input.png", Mask_override_image="mask.png", width=1024)
-
-                self.assertEqual(hash1, hash2)
-                self.assertNotEqual(hash1, hash3)
-        finally:
-            folder_paths.exists_annotated_filepath.return_value = None
-            folder_paths.get_annotated_filepath.side_effect = None
-
-
-
-class FakeImageTensor:
-    shape = (1, 32, 64, 3)
+        self.assertNotEqual(baseline, multiplied)
+        self.assertNotEqual(baseline, rounded)
 
 
 if __name__ == "__main__":
