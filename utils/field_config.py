@@ -1,11 +1,12 @@
 import json
+import math
 
 
 MAX_FIELDS = 24
 DEFAULT_SIZE_PRESET = "custom"
 DEFAULT_WIDTH = 1024
 DEFAULT_HEIGHT = 1024
-DEFAULT_SIZE_MULTIPLIER = "x1"
+DEFAULT_SIZE_MULTIPLIER = 1.0
 DEFAULT_DIVISIBLE_BY = 0
 
 SIZE_PRESETS = {
@@ -22,15 +23,6 @@ SIZE_PRESETS = {
 }
 
 SIZE_PRESET_NAMES = list(SIZE_PRESETS.keys())
-
-SIZE_MULTIPLIERS = {
-    "x1": 1,
-    "x2": 2,
-    "x3": 3,
-    "x4": 4,
-}
-
-SIZE_MULTIPLIER_OPTIONS = list(SIZE_MULTIPLIERS.keys())
 
 SUPPORTED_FIELD_TYPES = ("STRING", "DROPDOWN", "INT", "FLOAT", "BOOLEAN")
 
@@ -79,24 +71,31 @@ def resolve_size(size_preset, width, height):
 
 
 def parse_size_multiplier(size_multiplier):
-    """Return a supported integer multiplier, falling back to x1."""
-    normalized = str(size_multiplier or DEFAULT_SIZE_MULTIPLIER).strip().lower()
-    return SIZE_MULTIPLIERS.get(normalized, SIZE_MULTIPLIERS[DEFAULT_SIZE_MULTIPLIER])
+    """Return a positive finite float, accepting legacy x1 through x4 values."""
+    if isinstance(size_multiplier, str):
+        size_multiplier = size_multiplier.strip().lower()
+        if size_multiplier in ("x1", "x2", "x3", "x4"):
+            size_multiplier = size_multiplier[1:]
+    try:
+        multiplier = float(size_multiplier)
+    except (TypeError, ValueError, OverflowError):
+        return DEFAULT_SIZE_MULTIPLIER
+    return multiplier if math.isfinite(multiplier) and multiplier > 0 else DEFAULT_SIZE_MULTIPLIER
 
 
 def round_to_nearest_multiple(value, divisor):
     """Round to the closest positive multiple, choosing the higher value on ties."""
-    value = max(1, int(value))
+    value = max(1, float(value))
 
     try:
         divisor = int(divisor or 0)
     except (TypeError, ValueError):
-        return value
+        return int(value + 0.5)
 
     if divisor < 2:
-        return value
+        return int(value + 0.5)
 
-    lower = (value // divisor) * divisor
+    lower = int(value // divisor) * divisor
     upper = lower + divisor
 
     if lower < divisor:

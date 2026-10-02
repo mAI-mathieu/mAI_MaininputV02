@@ -47,8 +47,9 @@ class MainInputV02Tests(unittest.TestCase):
             ],
         )
         self.assertEqual(list(optional), ["size_multiplier", "divisible_by"])
-        self.assertEqual(optional["size_multiplier"][0], ["x1", "x2", "x3", "x4"])
-        self.assertEqual(optional["size_multiplier"][1]["default"], "x1")
+        self.assertEqual(optional["size_multiplier"][0], "FLOAT")
+        self.assertEqual(optional["size_multiplier"][1]["default"], 1.0)
+        self.assertEqual(optional["size_multiplier"][1]["min"], 0.01)
         self.assertEqual(optional["divisible_by"][1], {"default": 0, "min": 0})
 
     def test_output_count_and_fixed_outputs_remain_stable(self):
@@ -131,24 +132,26 @@ class MainInputV02Tests(unittest.TestCase):
         )
         self.assertEqual(result[8:], ("",) * 20)
 
-    def test_x1_keeps_custom_size_unchanged(self):
+    def test_one_keeps_custom_size_unchanged(self):
         result = self.node_class()().execute(
             width=1000,
             height=755,
-            size_multiplier="x1",
+            size_multiplier=1.0,
             divisible_by=0,
             fields_config="[]",
         )
 
         self.assertEqual(result[:2], (1000, 755))
 
-    def test_x2_x3_and_x4_multiply_custom_size(self):
+    def test_float_multipliers_scale_custom_size(self):
         node = self.node_class()()
 
         for multiplier, expected in (
-            ("x2", (1280, 960)),
-            ("x3", (1920, 1440)),
-            ("x4", (2560, 1920)),
+            (2.0, (1280, 960)),
+            (3.0, (1920, 1440)),
+            (4.0, (2560, 1920)),
+            (1.5, (960, 720)),
+            (0.5, (320, 240)),
         ):
             with self.subTest(multiplier=multiplier):
                 result = node.execute(
@@ -164,7 +167,7 @@ class MainInputV02Tests(unittest.TestCase):
             size_preset="16:9 landscape 1344x768",
             width=1,
             height=1,
-            size_multiplier="x2",
+            size_multiplier=2.0,
             fields_config="[]",
         )
 
@@ -174,7 +177,7 @@ class MainInputV02Tests(unittest.TestCase):
         result = self.node_class()().execute(
             width=1000,
             height=755,
-            size_multiplier="x2",
+            size_multiplier=2.0,
             divisible_by=64,
             fields_config="[]",
         )
@@ -184,9 +187,9 @@ class MainInputV02Tests(unittest.TestCase):
     def test_is_changed_includes_new_size_controls(self):
         node_class = self.node_class()
 
-        baseline = node_class.IS_CHANGED(size_multiplier="x1", divisible_by=0)
-        multiplied = node_class.IS_CHANGED(size_multiplier="x2", divisible_by=0)
-        rounded = node_class.IS_CHANGED(size_multiplier="x1", divisible_by=64)
+        baseline = node_class.IS_CHANGED(size_multiplier=1.0, divisible_by=0)
+        multiplied = node_class.IS_CHANGED(size_multiplier=1.5, divisible_by=0)
+        rounded = node_class.IS_CHANGED(size_multiplier=1.0, divisible_by=64)
 
         self.assertNotEqual(baseline, multiplied)
         self.assertNotEqual(baseline, rounded)

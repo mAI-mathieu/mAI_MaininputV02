@@ -1,4 +1,14 @@
-import { FIELD_TYPES, MAX_FIELDS, OUTPUT_TYPE_BY_FIELD_TYPE } from "./constants.js";
+import { DEFAULT_SIZE_MULTIPLIER, FIELD_TYPES, MAX_FIELDS, OUTPUT_TYPE_BY_FIELD_TYPE } from "./constants.js";
+
+
+export function normalizeSizeMultiplier(value) {
+    if (typeof value === "string") {
+        value = value.trim().toLowerCase();
+        if (/^x[1-4]$/.test(value)) value = value.slice(1);
+    }
+    const multiplier = Number(value);
+    return Number.isFinite(multiplier) && multiplier > 0 ? multiplier : DEFAULT_SIZE_MULTIPLIER;
+}
 
 
 export function capitalizeFirstLetter(str) {

@@ -6,7 +6,6 @@ from ..utils.field_config import (
     DEFAULT_SIZE_PRESET,
     DEFAULT_WIDTH,
     MAX_FIELDS,
-    SIZE_MULTIPLIER_OPTIONS,
     SIZE_PRESET_NAMES,
     parse_fields_config,
     resolve_final_size,
@@ -131,8 +130,8 @@ class mAI_MainInputV02:
             },
             "optional": {
                 "size_multiplier": (
-                    SIZE_MULTIPLIER_OPTIONS,
-                    {"default": DEFAULT_SIZE_MULTIPLIER},
+                    "FLOAT",
+                    {"default": DEFAULT_SIZE_MULTIPLIER, "min": 0.01, "step": 0.01},
                 ),
                 "divisible_by": (
                     "INT",

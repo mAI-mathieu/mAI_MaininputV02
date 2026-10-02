@@ -13,7 +13,7 @@ The node also has fixed size state:
 - `size_preset`: serialized dropdown widget
 - `width`: serialized `INT` widget and fixed `INT` output
 - `height`: serialized `INT` widget and fixed `INT` output
-- `size_multiplier`: serialized `x1` to `x4` dropdown widget
+- `size_multiplier`: serialized numeric `FLOAT` widget, default `1.0`, minimum `0.01`
 - `divisible_by`: serialized non-negative `INT` widget
 - `User_prompt`: serialized multiline `STRING` widget and fixed `STRING` output
 
@@ -53,9 +53,16 @@ serialized widgets in `required`, in their original order: `size_preset`,
 `width`, `height`, `User_prompt`, and `fields_config`. The new
 `size_multiplier` and `divisible_by` primitive widgets are appended in
 `optional`. Older positional `widgets_values` therefore continue to map to
-their original widgets, while the new widgets retain their defaults (`x1` and
+their original widgets, while the new widgets retain their defaults (`1.0` and
 `0`). Older API prompts may omit the new values and use the same defaults. The
 frontend DOMWidget is added only after all fixed backend widgets exist.
+
+The multiplier is exported as a number. During fixed-widget setup and the
+delayed restore pass, `normalizeSizeMultiplier` converts saved legacy dropdown
+strings `x1` through `x4` to numeric factors on that node instance. Positive
+finite floats are preserved; invalid or non-positive values default to `1.0`.
+The backend parser also accepts legacy strings for direct Python execution;
+API clients must use numbers to satisfy ComfyUI's `FLOAT` input validation.
 
 `User_prompt` is not stored in `fields_config`.
 
@@ -76,7 +83,7 @@ or sessionStorage.
 - `constants.js`: shared extension constants, size presets, fixed output
   descriptors, and field type maps.
 - `field_config.js`: field parsing, validation, normalization, and
-  serialization.
+  serialization, plus numeric multiplier normalization for legacy workflows.
 - `node_state.js`: hidden config widget access, per-node field state,
   warnings, and rebuild scheduling.
 - `field_widgets.js`: fixed size widget callbacks, DOMWidget creation,
@@ -119,13 +126,16 @@ calls `resolve_final_size`.
 Resolution is deterministic:
 
 1. `resolve_size` chooses preset dimensions or custom `width` and `height`.
-2. `parse_size_multiplier` maps `x1`, `x2`, `x3`, or `x4` to an integer. An
-   invalid value safely falls back to `x1`.
+2. `parse_size_multiplier` accepts a positive finite float, including fractional
+   scales below or above `1`, and legacy `x1` through `x4` strings. Invalid or
+   non-positive values safely fall back to `1.0`.
 3. Both positive base dimensions are multiplied.
 4. `round_to_nearest_multiple` adjusts each multiplied dimension when
-   `divisible_by >= 2`. Values `0` and `1` leave dimensions unchanged.
+   `divisible_by >= 2`. Values `0` and `1` round to the nearest whole pixel,
+   with a minimum of one pixel. Pixel ties choose the higher integer.
 
-Nearest-multiple rounding uses integer distances. Exact ties choose the higher
+Nearest-multiple rounding uses the scaled dimensions without first truncating
+fractional pixels. Exact ties choose the higher
 multiple, and active rounding never returns a value smaller than the divisor.
 The final adjusted dimensions feed the fixed `Width` and `Height` outputs and
 the calculated `Aspect_ratio`.

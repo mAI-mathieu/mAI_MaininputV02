@@ -6,6 +6,7 @@ import {
     normalizeBoolean,
     normalizeName,
     normalizeOptions,
+    normalizeSizeMultiplier,
     normalizeString,
     normalizeValue,
 } from "./field_config.js";
@@ -196,6 +197,11 @@ function fixedBackendWidgetsReady(node) {
 
 
 function setupSizeWidgets(node) {
+    const multiplierWidget = findNodeWidget(node, "size_multiplier");
+    if (multiplierWidget) {
+        // Convert saved dropdown values before the next workflow/API export.
+        multiplierWidget.value = normalizeSizeMultiplier(multiplierWidget.value);
+    }
     const sizePresetWidget = findNodeWidget(node, "size_preset");
     const widthWidget = findNodeWidget(node, "width");
     const heightWidget = findNodeWidget(node, "height");
